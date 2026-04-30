@@ -1,0 +1,173 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Hotel;
+use App\Services\ActivityLogService;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+
+class HotelManageController extends Controller
+{
+    public function index(Request $request)
+    {
+        $query = Hotel::with('owner:id,name,email');
+
+        if ($search = $request->search) {
+            $query->where(fn($q) => $q
+                ->where('name',    'like', "%{$search}%")
+                ->orWhere('city',  'like', "%{$search}%")
+                ->orWhere('address','like', "%{$search}%")
+            );
+        }
+        if ($status = $request->status) {
+            $query->where('status', $status);
+        }
+
+        $result = $query->orderBy('created_at', 'desc')->paginate($request->limit ?? 15);
+
+        return response()->json([
+            'success'    => true,
+            'data'       => $result->items(),
+            'pagination' => [
+                'total'      => $result->total(),
+                'totalPages' => $result->lastPage(),
+                'page'       => $result->currentPage(),
+            ],
+        ]);
+    }
+
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'name'        => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'address'     => 'required|string',
+            'city'        => 'required|string',
+            'province'    => 'nullable|string',
+            'star_rating' => 'nullable|integer|min:1|max:5',
+            'facilities'  => 'nullable|array',
+            'status'      => 'nullable|in:pending,approved,blocked',
+            'owner_id'    => 'nullable|exists:users,id',
+        ]);
+
+        $data['slug']   = Str::slug($data['name']) . '-' . time();
+        $data['status'] = $data['status'] ?? 'approved';
+
+        if ($data['status'] === 'approved') {
+            $data['approved_by'] = $request->user()->id;
+            $data['approved_at'] = now();
+        }
+
+        $data['images'] = $this->uploadImages($request, []);
+
+        $hotel = Hotel::create($data);
+        ActivityLogService::log($request->user()->id, 'ADMIN_CREATE_HOTEL', 'hotel', $hotel->id, $request);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Hotel berhasil ditambahkan.',
+            'data'    => $hotel->load('owner:id,name,email'),
+        ], 201);
+    }
+
+    public function update(Request $request, string $id)
+    {
+        $hotel = Hotel::findOrFail($id);
+
+        $data = $request->validate([
+            'name'        => 'sometimes|string|max:255',
+            'description' => 'nullable|string',
+            'address'     => 'sometimes|string',
+            'city'        => 'sometimes|string',
+            'province'    => 'nullable|string',
+            'star_rating' => 'nullable|integer|min:1|max:5',
+            'facilities'  => 'nullable|array',
+            'status'      => 'nullable|in:pending,approved,blocked',
+            'owner_id'    => 'nullable|exists:users,id',
+        ]);
+
+        if (isset($data['status']) && $data['status'] === 'approved' && $hotel->status !== 'approved') {
+            $data['approved_by'] = $request->user()->id;
+            $data['approved_at'] = now();
+        }
+
+        // Merge kept existing images + newly uploaded images
+        $existingImages = $request->input('existing_images', []);
+        if (is_string($existingImages)) {
+            $existingImages = json_decode($existingImages, true) ?? [];
+        }
+        $data['images'] = $this->uploadImages($request, (array) $existingImages);
+
+        $hotel->update($data);
+        ActivityLogService::log($request->user()->id, 'ADMIN_UPDATE_HOTEL', 'hotel', $id, $request);
+
+        return response()->json([
+            'success' => true,
+            'data'    => $hotel->fresh(['owner:id,name,email']),
+        ]);
+    }
+
+    public function destroy(Request $request, string $id)
+    {
+        $hotel = Hotel::findOrFail($id);
+        ActivityLogService::log($request->user()->id, 'ADMIN_DELETE_HOTEL', 'hotel', $id, $request);
+        $hotel->delete();
+
+        return response()->json(['success' => true, 'message' => 'Hotel berhasil dihapus.']);
+    }
+
+    public function pending()
+    {
+        $hotels = Hotel::where('status', 'pending')
+            ->with('owner:id,name,email,phone')
+            ->orderBy('created_at')
+            ->get();
+
+        return response()->json(['success' => true, 'data' => $hotels]);
+    }
+
+    public function approve(Request $request, string $id)
+    {
+        $hotel = Hotel::findOrFail($id);
+        $hotel->update(['status' => 'approved', 'approved_by' => $request->user()->id, 'approved_at' => now()]);
+        ActivityLogService::log($request->user()->id, 'APPROVE_HOTEL', 'hotel', $id, $request);
+
+        return response()->json(['success' => true, 'message' => 'Hotel disetujui.', 'data' => $hotel]);
+    }
+
+    public function block(Request $request, string $id)
+    {
+        $hotel = Hotel::findOrFail($id);
+        $hotel->update(['status' => 'blocked']);
+        ActivityLogService::log($request->user()->id, 'BLOCK_HOTEL', 'hotel', $id, $request);
+
+        return response()->json(['success' => true, 'message' => 'Hotel diblokir.']);
+    }
+
+    private function uploadImages(Request $request, array $existing): array
+    {
+        $allowed = ['jpg', 'jpeg', 'png', 'webp'];
+        $dir     = public_path('uploads/hotels');
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+
+        $urls = $existing;
+
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $file) {
+                if (count($urls) >= 10) break;
+
+                $ext = strtolower($file->getClientOriginalExtension());
+                if (!in_array($ext, $allowed)) continue;
+                if ($file->getSize() > 10 * 1024 * 1024) continue;
+
+                $filename = 'hotel_' . time() . '_' . uniqid() . '.' . $ext;
+                $file->move($dir, $filename);
+                $urls[] = url('uploads/hotels/' . $filename);
+            }
+        }
+
+        return $urls;
+    }
+}
