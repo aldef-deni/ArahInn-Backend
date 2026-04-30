@@ -79,7 +79,7 @@ class PromoController extends Controller
 
     public function destroy(string $id)
     {
-        Promo::findOrFail($id)->update(['is_active' => false]);
-        return response()->json(['success' => true, 'message' => 'Promo dinonaktifkan.']);
+        Promo::findOrFail($id)->delete();
+        return response()->json(['success' => true, 'message' => 'Promo dihapus.']);
     }
 }
