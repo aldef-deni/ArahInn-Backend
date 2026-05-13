@@ -24,25 +24,27 @@ class PricingService
     public function calculate(array $params): array
     {
         [
-            'room_id'   => $roomId,
-            'check_in'  => $checkIn,
-            'check_out' => $checkOut,
+            'room_id'    => $roomId,
+            'check_in'   => $checkIn,
+            'check_out'  => $checkOut,
             'promo_code' => $promoCode,
-            'user_id'   => $userId,
+            'user_id'    => $userId,
             'use_points' => $usePoints,
-        ] = array_merge(['promo_code' => null, 'user_id' => null, 'use_points' => false], $params);
+            'room_count' => $roomCount,
+        ] = array_merge(['promo_code' => null, 'user_id' => null, 'use_points' => false, 'room_count' => 1], $params);
 
-        $room   = Room::findOrFail($roomId);
-        $ciDate = Carbon::parse($checkIn);
-        $coDate = Carbon::parse($checkOut);
-        $nights = $ciDate->diffInDays($coDate);
+        $room      = Room::with('hotel:id,owner_id')->findOrFail($roomId);
+        $roomCount = max(1, (int) $roomCount);
+        $ciDate    = Carbon::parse($checkIn);
+        $coDate    = Carbon::parse($checkOut);
+        $nights    = $ciDate->diffInDays($coDate);
 
         if ($nights <= 0) {
             throw new \InvalidArgumentException('Tanggal checkout harus setelah check-in.');
         }
 
-        // 1. Base price dengan weekend premium
-        $basePrice = $this->calculateBasePrice($room->base_price, $ciDate, $coDate);
+        // 1. Base price dengan weekend premium × jumlah kamar
+        $basePrice = $this->calculateBasePrice($room->base_price, $ciDate, $coDate) * $roomCount;
 
         // 2. Occupancy-based markup
         $occupancyRate = $this->getOccupancyRate($roomId, $checkIn, $checkOut, $room->total_units);
@@ -54,7 +56,8 @@ class PricingService
         $subtotal     = $basePrice + $markupAmount;
 
         // 4. Promo discount
-        [$promoDiscount, $promo] = $this->applyPromo($promoCode, $subtotal);
+        $hotelOwnerId = $room->hotel->owner_id ?? null;
+        [$promoDiscount, $promo] = $this->applyPromo($promoCode, $subtotal, $hotelOwnerId);
         $subtotal -= $promoDiscount;
 
         // 5. Loyalty points (max 10% dari subtotal)
@@ -125,7 +128,7 @@ class PricingService
     /**
      * Validasi dan hitung diskon promo
      */
-    private function applyPromo(?string $code, float $amount): array
+    private function applyPromo(?string $code, float $amount, ?int $hotelOwnerId = null): array
     {
         if (!$code) return [0, null];
 
@@ -133,6 +136,11 @@ class PricingService
 
         if (!$promo) {
             throw new \InvalidArgumentException('Kode promo tidak valid atau sudah kadaluarsa.');
+        }
+
+        // Owner-scoped promo: only valid for that owner's hotels
+        if ($promo->owner_id !== null && $promo->owner_id !== $hotelOwnerId) {
+            throw new \InvalidArgumentException('Kode promo tidak berlaku untuk hotel ini.');
         }
 
         if ($promo->quota !== null && $promo->used_count >= $promo->quota) {

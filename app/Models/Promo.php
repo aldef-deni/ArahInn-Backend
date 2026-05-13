@@ -9,7 +9,7 @@ class Promo extends Model
     protected $fillable = [
         'code', 'type', 'name', 'description', 'discount_type', 'discount_value',
         'min_purchase', 'max_discount', 'quota', 'used_count',
-        'start_date', 'end_date', 'is_active', 'created_by',
+        'start_date', 'end_date', 'is_active', 'created_by', 'owner_id',
     ];
 
     protected $casts = [
@@ -30,6 +30,11 @@ class Promo extends Model
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function owner()
+    {
+        return $this->belongsTo(User::class, 'owner_id');
     }
 
     public function bookings()

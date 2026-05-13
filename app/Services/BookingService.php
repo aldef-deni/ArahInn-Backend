@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\Room;
 use App\Models\LoyaltyPoint;
 use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -76,6 +77,7 @@ class BookingService
             'promo_code' => $data['promo_code'] ?? null,
             'user_id'    => $userId,
             'use_points' => $data['use_points'] ?? false,
+            'room_count' => $data['room_count'] ?? 1,
         ]);
 
         // 2. Lock kamar
@@ -94,6 +96,7 @@ class BookingService
                     'check_out'        => $data['check_out'],
                     'total_nights'     => $priceData['nights'],
                     'guests'           => $data['guests'],
+                    'room_count'       => $data['room_count'] ?? 1,
                     'base_price'       => $priceData['base_price'],
                     'markup_amount'    => $priceData['markup_amount'],
                     'promo_discount'   => $priceData['promo_discount'],
@@ -124,17 +127,17 @@ class BookingService
                 return $booking;
             });
 
-            // 4. Kirim email konfirmasi ke tamu (queued)
+            // 4. Kirim email konfirmasi ke tamu
             $booking->load(['hotel', 'room']);
             try {
-                Mail::to($booking->guest_email)->queue(new \App\Mail\BookingConfirmationMail($booking));
+                Mail::to($booking->guest_email)->send(new \App\Mail\BookingConfirmationMail($booking));
             } catch (\Throwable) {}
 
-            // 5. Kirim notifikasi reservasi baru ke owner hotel (queued)
+            // 5. Kirim notifikasi reservasi baru ke owner hotel
             try {
                 $ownerEmail = \App\Models\User::find($booking->hotel?->owner_id)?->email;
                 if ($ownerEmail) {
-                    Mail::to($ownerEmail)->queue(new \App\Mail\NewReservationMail($booking));
+                    Mail::to($ownerEmail)->send(new \App\Mail\NewReservationMail($booking));
                 }
             } catch (\Throwable) {}
 
@@ -157,16 +160,36 @@ class BookingService
             $this->loyalty->earn($booking->user_id, $points, $booking->id);
         }
 
-        Mail::to($booking->guest_email)->queue(new \App\Mail\BookingIssuedMail($booking));
+        Mail::to($booking->guest_email)->send(new \App\Mail\BookingIssuedMail($booking));
+
+        // Notify guest: payment confirmed
+        NotificationService::send(
+            $booking->user_id, 'booking_paid',
+            'Pembayaran Dikonfirmasi',
+            "Booking #{$booking->booking_code} telah dikonfirmasi. Selamat menikmati perjalanan!",
+            ['booking_id' => $booking->id, 'booking_code' => $booking->booking_code]
+        );
 
         return $booking->fresh(['hotel', 'room']);
     }
 
     public function cancel(Booking $booking): Booking
     {
+        $booking->load(['hotel', 'room']);
         $booking->update(['status' => 'canceled', 'canceled_at' => now()]);
         $this->lock->unlock($booking->room_id);
-        Mail::to($booking->guest_email)->queue(new \App\Mail\BookingCanceledMail($booking));
+
+        // Email ke tamu
+        Mail::to($booking->guest_email)->send(new \App\Mail\BookingCanceledMail($booking));
+
+        // Email ke owner hotel
+        try {
+            $ownerEmail = \App\Models\User::find($booking->hotel?->owner_id)?->email;
+            if ($ownerEmail) {
+                Mail::to($ownerEmail)->send(new \App\Mail\BookingCanceledOwnerMail($booking));
+            }
+        } catch (\Throwable) {}
+
         return $booking;
     }
 }

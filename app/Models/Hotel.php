@@ -7,16 +7,59 @@ class Hotel extends Model
 {
     use HasFactory;
     protected $fillable = [
-        'owner_id','name','slug','description','address','city','province',
-        'country','latitude','longitude','star_rating','facilities','images',
-        'status','approved_by','approved_at',
+        // Core
+        'owner_id','name','alias','category','slug','description',
+        'is_brand_chain','currency','star_rating',
+        // Lokasi
+        'address','city','district','village','province','country',
+        'postal_code','latitude','longitude',
+        // Tamu
+        'guest_types',
+        // PIC
+        'pic_position','pic_phone','property_phone','fax',
+        // Legalitas
+        'company_name','company_address','company_country',
+        'agree_name','agree_position','agree_email','agree_phone',
+        // Platform
+        'platforms',
+        // Fasilitas & Foto
+        'facilities','images',
+        // Kebijakan
+        'gender_policy','marriage_book','deposit_required','all_ages_allowed',
+        'breakfast_available','breakfast_start','breakfast_end',
+        'smoking_allowed','alcohol_allowed','pets_allowed',
+        // Pembayaran
+        'cancellation_policy','payment_method',
+        'bank_name','bank_branch','bank_account_name','bank_account_number',
+        'vcc_accepted_types','vcc_email','vcc_account_name',
+        // NPWP
+        'npwp_type','npwp_number','npwp_name','npwp_doc',
+        'nitku_number','nitku_name','nitku_doc','npwp_support_doc',
+        // Meta
+        'registration_source','status','approved_by','approved_at',
+        // Harga
+        'pricing_model','child_policy',
     ];
     protected $casts = [
-        'facilities'  => 'array',
-        'images'      => 'array',
-        'latitude'    => 'decimal:8',
-        'longitude'   => 'decimal:8',
-        'approved_at' => 'datetime',
+        'facilities'         => 'array',
+        'images'             => 'array',
+        'guest_types'        => 'array',
+        'platforms'          => 'array',
+        'vcc_accepted_types' => 'array',
+        'is_brand_chain'     => 'boolean',
+        'gender_policy'      => 'boolean',
+        'marriage_book'      => 'boolean',
+        'deposit_required'   => 'boolean',
+        'all_ages_allowed'   => 'boolean',
+        'breakfast_available'=> 'boolean',
+        'smoking_allowed'    => 'boolean',
+        'alcohol_allowed'    => 'boolean',
+        'pets_allowed'       => 'boolean',
+        'star_rating'        => 'integer',
+        'latitude'           => 'decimal:8',
+        'longitude'          => 'decimal:8',
+        'approved_at'        => 'datetime',
+        'child_policy'       => 'array',
     ];
     protected $attributes = ['country' => 'Indonesia', 'status' => 'pending', 'facilities' => '[]', 'images' => '[]'];
 
@@ -25,6 +68,7 @@ class Hotel extends Model
     public function rooms()    { return $this->hasMany(Room::class); }
     public function bookings() { return $this->hasMany(Booking::class); }
     public function chatRooms(){ return $this->hasMany(ChatRoom::class); }
+    public function reviews()   { return $this->hasMany(Review::class); }
 
     public function scopeApproved($q) { return $q->where('status', 'approved'); }
 }

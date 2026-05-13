@@ -17,6 +17,16 @@ use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\HotelManageController;
 use App\Http\Controllers\Admin\UserManageController;
 use App\Http\Controllers\Admin\SettingController;
+use App\Http\Controllers\Admin\CampaignController;
+use App\Http\Controllers\Admin\MarketManagerController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PropertyListingController;
+use App\Http\Controllers\ReviewController;
+use App\Http\Controllers\RatePlanController;
+use App\Http\Controllers\RoomPriceController;
+use App\Http\Controllers\HotelFeeController;
+use App\Http\Controllers\HotelSettingsController;
+use App\Http\Controllers\OwnerDashboardController;
 
 /*
 |--------------------------------------------------------------------------
@@ -51,16 +61,20 @@ Route::prefix('auth')->group(function () {
 });
 
 // ── Hotels (Owner - must be before public /{id} wildcard) ────────────
-Route::get('/hotels/my-hotel', [HotelController::class, 'myHotel'])
+Route::get('/hotels/my-hotel',  [HotelController::class, 'myHotel'])
+    ->middleware(['auth:sanctum', 'role:owner']);
+Route::get('/hotels/my-hotels', [HotelController::class, 'myHotels'])
     ->middleware(['auth:sanctum', 'role:owner']);
 
 // ── Hotels (Public) ───────────────────────────────────
 Route::prefix('hotels')->group(function () {
-    Route::get('/search',       [HotelController::class, 'search']);
-    Route::get('/cities',       [HotelController::class, 'cities']);
-    Route::get('/{id}',         [HotelController::class, 'show']);
-    Route::get('/{id}/rooms',   [RoomController::class, 'byHotel']);
+    Route::get('/search',            [HotelController::class, 'search']);
+    Route::get('/cities',            [HotelController::class, 'cities']);
+    Route::get('/{id}',              [HotelController::class, 'show']);
+    Route::get('/{id}/rooms',        [RoomController::class, 'byHotel']);
     Route::get('/{id}/availability', [RoomController::class, 'availability']);
+    Route::get('/{id}/reviews',      [ReviewController::class, 'byHotel']);
+    Route::get('/{id}/campaigns',    [CampaignController::class, 'forHotel']);
 });
 
 // ── Promos (Public) ───────────────────────────────────
@@ -69,8 +83,24 @@ Route::prefix('promos')->group(function () {
     Route::get('/flash-sales', [PromoController::class, 'flashSales']);
 });
 
+// ── Property Listings (Owner - must be before public /{id} wildcard) ────
+Route::get('/properties/my-listings', [PropertyListingController::class, 'myListings'])
+    ->middleware(['auth:sanctum', 'role:owner']);
+
+// ── Property Listings (Public) ────────────────────────
+Route::prefix('properties')->group(function () {
+    Route::get('/',           [PropertyListingController::class, 'index']);
+    Route::get('/pending',    [PropertyListingController::class, 'pending'])
+        ->middleware(['auth:sanctum', 'role:superadmin|admin']);
+    Route::get('/{id}',       [PropertyListingController::class, 'show']);
+    Route::post('/{id}/approve', [PropertyListingController::class, 'approve'])
+        ->middleware(['auth:sanctum', 'role:superadmin']);
+    Route::post('/{id}/reject',  [PropertyListingController::class, 'reject'])
+        ->middleware(['auth:sanctum', 'role:superadmin']);
+});
+
 // ── Payment Webhooks (Public — no auth) ──────────────
-Route::post('/payments/webhook/midtrans', [PaymentController::class, 'webhookMidtrans']);
+Route::post('/payments/webhook/doku', [PaymentController::class, 'webhookDoku']);
 
 // =====================================================
 // AUTHENTICATED ROUTES
@@ -81,6 +111,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me',      [AuthController::class, 'me']);
 
+    // ── Property Listings (Owner) ─────────────────────
+    Route::prefix('properties')->middleware('role:owner|admin|superadmin')->group(function () {
+        Route::post('/',      [PropertyListingController::class, 'store']);
+        Route::put('/{id}',   [PropertyListingController::class, 'update']);
+        Route::delete('/{id}',[PropertyListingController::class, 'destroy']);
+    });
+
     // ── Hotels (Owner / Admin) ────────────────────────
     Route::prefix('hotels')->middleware('role:owner|admin|superadmin')->group(function () {
         Route::post('/',                    [HotelController::class, 'store']);
@@ -88,6 +125,32 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/rooms',          [RoomController::class, 'store']);
         Route::put('/{hotelId}/rooms/{roomId}',   [RoomController::class, 'update']);
         Route::delete('/{hotelId}/rooms/{roomId}', [RoomController::class, 'destroy']);
+
+        // ── Harga & Ketersediaan ───────────────────────
+        // Settings (pricing model, child policy)
+        Route::get('/{hotelId}/settings',   [HotelSettingsController::class, 'show']);
+        Route::put('/{hotelId}/settings',   [HotelSettingsController::class, 'update']);
+
+        // Rate Plans
+        Route::get('/{hotelId}/rate-plans',              [RatePlanController::class, 'index']);
+        Route::post('/{hotelId}/rate-plans',             [RatePlanController::class, 'store']);
+        Route::get('/{hotelId}/rate-plans/{planId}',     [RatePlanController::class, 'show']);
+        Route::put('/{hotelId}/rate-plans/{planId}',     [RatePlanController::class, 'update']);
+        Route::delete('/{hotelId}/rate-plans/{planId}',  [RatePlanController::class, 'destroy']);
+
+        // Per-date room prices & availability
+        Route::get('/{hotelId}/rooms/{roomId}/prices',  [RoomPriceController::class, 'index']);
+        Route::put('/{hotelId}/rooms/{roomId}/prices',  [RoomPriceController::class, 'upsert']);
+        Route::put('/{hotelId}/rooms/{roomId}/toggle-now', [RoomPriceController::class, 'toggleNow']);
+
+        // Bulk update
+        Route::post('/{hotelId}/rooms/prices/bulk',     [RoomPriceController::class, 'bulk']);
+
+        // Hotel fees (biaya tambahan)
+        Route::get('/{hotelId}/fees',             [HotelFeeController::class, 'index']);
+        Route::post('/{hotelId}/fees',            [HotelFeeController::class, 'store']);
+        Route::put('/{hotelId}/fees/{feeId}',     [HotelFeeController::class, 'update']);
+        Route::delete('/{hotelId}/fees/{feeId}',  [HotelFeeController::class, 'destroy']);
     });
     Route::post('/hotels/{id}/approve', [HotelController::class, 'approve'])
         ->middleware('role:superadmin');
@@ -128,11 +191,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('promos')->group(function () {
         Route::post('/validate', [PromoController::class, 'validate']);
 
+        // Owner: manage own promos + view own promo list
+        Route::middleware('role:owner')->group(function () {
+            Route::get('/my',       [PromoController::class, 'myPromos']);
+            Route::get('/platform', [PromoController::class, 'platformPromos']);
+            Route::post('/',        [PromoController::class, 'store']);
+            Route::put('/{id}',     [PromoController::class, 'update']);
+            Route::delete('/{id}',  [PromoController::class, 'destroy']);
+        });
+
+        // Admin: manage all promos + owners list for dropdown
         Route::middleware('role:admin|superadmin')->group(function () {
-            Route::get('/',       [PromoController::class, 'index']);
-            Route::post('/',      [PromoController::class, 'store']);
-            Route::put('/{id}',   [PromoController::class, 'update']);
-            Route::delete('/{id}',[PromoController::class, 'destroy']);
+            Route::get('/',           [PromoController::class, 'index']);
+            Route::post('/',          [PromoController::class, 'store']);
+            Route::put('/{id}',       [PromoController::class, 'update']);
+            Route::delete('/{id}',    [PromoController::class, 'destroy']);
+            Route::get('/owners-list',[PromoController::class, 'ownersList']);
         });
 
         // Loyalty
@@ -140,6 +214,25 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/loyalty/history',  [LoyaltyController::class, 'history']);
         Route::post('/loyalty/redeem',  [LoyaltyController::class, 'redeem']);
     });
+
+    // ── Superadmin: MM Handler (assign owners to Market Managers) ────────
+    Route::prefix('admin/mm-handler')->middleware('role:superadmin')->group(function () {
+        Route::get('/',                [MarketManagerController::class, 'listMMs']);
+        Route::get('/{mmId}/owners',   [MarketManagerController::class, 'getMMOwners']);
+        Route::post('/{mmId}/owners',  [MarketManagerController::class, 'setMMOwners']);
+    });
+
+    // ── Owner Dashboard ───────────────────────────────────────────────────
+    Route::get('/owner/dashboard', [OwnerDashboardController::class, 'index'])
+        ->middleware('role:owner');
+
+    // ── Owner: get my Market Manager ──────────────────────────────────────
+    Route::get('/owner/market-manager', [MarketManagerController::class, 'myMarketManager'])
+        ->middleware('role:owner');
+
+    // ── Campaigns (Owner: view campaigns targeting them) ──────────────────
+    Route::get('/campaigns/my', [CampaignController::class, 'myList'])
+        ->middleware('role:owner');
 
     // ── Users ─────────────────────────────────────────
     Route::prefix('users')->group(function () {
@@ -160,6 +253,22 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::put('/{id}',          [UserManageController::class, 'update']);
             Route::delete('/{id}',       [UserManageController::class, 'destroy']);
         });
+    });
+
+    // ── Reviews ───────────────────────────────────────
+    Route::post('/reviews', [ReviewController::class, 'store']);
+    Route::prefix('admin/reviews')->middleware('role:superadmin|admin')->group(function () {
+        Route::get('/',              [ReviewController::class, 'adminIndex']);
+        Route::post('/{id}/approve', [ReviewController::class, 'approve']);
+        Route::post('/{id}/reject',  [ReviewController::class, 'reject']);
+    });
+
+    // ── Notifications ─────────────────────────────────
+    Route::prefix('notifications')->group(function () {
+        Route::get('/',            [NotificationController::class, 'index']);
+        Route::get('/unread-count',[NotificationController::class, 'unreadCount']);
+        Route::post('/mark-all-read', [NotificationController::class, 'markAllRead']);
+        Route::post('/{id}/read', [NotificationController::class, 'markRead']);
     });
 
     // ── Chat ──────────────────────────────────────────
@@ -183,8 +292,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/canceled',    [ReportController::class, 'canceled']);
         Route::get('/logs',                [DashboardController::class, 'logs'])
             ->middleware('role:superadmin');
+        // Finance can read hotels list (for report filters)
+        Route::get('/hotels',         [HotelManageController::class, 'index']);
         Route::prefix('hotels')->middleware('role:superadmin|admin')->group(function () {
-            Route::get('/',              [HotelManageController::class, 'index']);
             Route::get('/pending',       [HotelManageController::class, 'pending']);
             Route::post('/',             [HotelManageController::class, 'store']);
             Route::put('/{id}',          [HotelManageController::class, 'update']);
@@ -192,6 +302,14 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::post('/{id}/approve', [HotelManageController::class, 'approve']);
             Route::post('/{id}/block',   [HotelManageController::class, 'block']);
         });
+        // Campaigns (CRUD admin only)
+        Route::prefix('campaigns')->group(function () {
+            Route::get('/',       [CampaignController::class, 'index']);
+            Route::post('/',      [CampaignController::class, 'store']);
+            Route::put('/{id}',   [CampaignController::class, 'update']);
+            Route::delete('/{id}',[CampaignController::class, 'destroy']);
+        });
+
         Route::get('/settings/payment-gateways',  [SettingController::class, 'getGateways'])
             ->middleware('role:superadmin');
         Route::post('/settings/payment-gateways', [SettingController::class, 'setGateway'])

@@ -133,17 +133,17 @@ class RoomController extends Controller
 
     private function storeRoomImageLocally($file): string
     {
-        $directory = public_path('uploads/rooms');
-
-        if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
-            throw new \RuntimeException('Folder upload rooms tidak bisa dibuat.');
-        }
+        $directory = storage_path('app/public/uploads/rooms');
+        if (!is_dir($directory)) mkdir($directory, 0755, true);
 
         $extension = strtolower($file->getClientOriginalExtension() ?: 'jpg');
-        $filename = now()->format('YmdHis') . '_' . Str::random(12) . '.' . $extension;
+        $filename  = now()->format('YmdHis') . '_' . Str::random(12) . '.' . $extension;
 
+        $oldUmask = umask(0022);
         $file->move($directory, $filename);
+        umask($oldUmask);
+        @chmod($directory . DIRECTORY_SEPARATOR . $filename, 0644);
 
-        return asset('uploads/rooms/' . $filename);
+        return 'uploads/rooms/' . $filename;
     }
 }

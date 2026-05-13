@@ -7,14 +7,19 @@ class Room extends Model
 {
     use HasFactory;
     protected $fillable = [
-        'hotel_id','name','type','description','max_guests',
-        'base_price','facilities','images','total_units','is_active',
+        'hotel_id','name','type','description',
+        'smoking_policy','has_bedrooms','bed_configs',
+        'max_guests','base_price','facilities','images',
+        'total_units','is_active',
     ];
     protected $casts = [
-        'facilities'  => 'array',
-        'images'      => 'array',
-        'base_price'  => 'decimal:2',
-        'is_active'   => 'boolean',
+        'facilities'     => 'array',
+        'images'         => 'array',
+        'bed_configs'    => 'array',
+        'base_price'     => 'float',
+        'is_active'      => 'boolean',
+        'smoking_policy' => 'boolean',
+        'has_bedrooms'   => 'boolean',
     ];
     protected $attributes = ['max_guests' => 2, 'total_units' => 1, 'is_active' => true, 'facilities' => '[]', 'images' => '[]'];
 

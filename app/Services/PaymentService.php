@@ -5,10 +5,6 @@ namespace App\Services;
 use App\Models\LoyaltyPoint;
 use App\Models\Booking;
 use App\Models\Payment;
-use Midtrans\Config;
-use Midtrans\Snap;
-use Midtrans\CoreApi;
-use Midtrans\Notification;
 
 // =====================================================
 // LOYALTY SERVICE
@@ -56,128 +52,116 @@ class LoyaltyService
 }
 
 // =====================================================
-// PAYMENT SERVICE (Midtrans)
+// PAYMENT SERVICE (DOKU SNAP)
 // =====================================================
 class PaymentService
 {
-    public function __construct()
-    {
-        Config::$serverKey    = config('services.midtrans.server_key');
-        Config::$clientKey    = config('services.midtrans.client_key');
-        Config::$isProduction = config('services.midtrans.is_production', false);
-        Config::$isSanitized  = true;
-        Config::$is3ds        = true;
-    }
+    public function __construct(private DokuService $doku) {}
 
     /**
-     * Buat transaksi Midtrans Bank Transfer / VA
+     * Generate DOKU virtual account for the booking.
+     * $paymentMethod = bank slug: 'bca' | 'mandiri' | 'bni' | 'bri' | 'permata'
      */
     public function initiate(Booking $booking, string $paymentMethod): array
     {
-        if (!in_array($booking->status, ['pending'])) {
+        if ($booking->status !== 'pending') {
             throw new \InvalidArgumentException('Booking tidak dalam status pending.');
         }
 
-        $params = [
-            'transaction_details' => [
-                'order_id'    => $booking->booking_code,
-                'gross_amount'=> (int) $booking->total_price,
-            ],
-            'item_details' => [[
-                'id'       => $booking->room_id,
-                'price'    => (int) $booking->total_price,
-                'quantity' => 1,
-                'name'     => ($booking->hotel->name ?? 'Hotel') . ' - ' . ($booking->room->name ?? 'Kamar'),
-            ]],
-            'customer_details' => [
-                'first_name' => $booking->guest_name,
-                'email'      => $booking->guest_email,
-                'phone'      => $booking->guest_phone,
-            ],
-        ];
+        // Return existing active VA instead of calling DOKU again (prevents "Inconsistent Request")
+        $existing = Payment::where('booking_id', $booking->id)
+            ->where('status', 'pending')
+            ->where('gateway', 'doku')
+            ->where('expired_at', '>', now())
+            ->latest()
+            ->first();
 
-        // Payment method specific
-        if (in_array($paymentMethod, ['bca', 'bni', 'bri', 'permata'])) {
-            $params['payment_type']  = 'bank_transfer';
-            $params['bank_transfer'] = ['bank' => $paymentMethod];
-        } elseif ($paymentMethod === 'gopay') {
-            $params['payment_type'] = 'gopay';
-        } elseif ($paymentMethod === 'qris') {
-            $params['payment_type'] = 'qris';
-        } else {
-            $params['payment_type']  = 'bank_transfer';
-            $params['bank_transfer'] = ['bank' => 'bca'];
+        if ($existing) {
+            $vaNumber = trim($existing->payload['_va_number'] ?? '');
+            return [
+                'payment'    => $existing,
+                'va_number'  => $vaNumber,
+                'bank'       => strtoupper($existing->method),
+                'expired_at' => $existing->expired_at->toIso8601String(),
+            ];
         }
 
-        try {
-            $response = CoreApi::charge($params);
-        } catch (\Exception $e) {
-            throw new \RuntimeException('Gagal membuat transaksi: ' . $e->getMessage());
-        }
+        $expiresAt = now()->addHour();
 
-        // Simpan payment record
+        $result = $this->doku->createVirtualAccount(
+            bank        : $paymentMethod,
+            bookingCode : $booking->booking_code,
+            bookingId   : $booking->id,
+            amount      : (float) $booking->total_price,
+            customer    : [
+                'name'  => $booking->guest_name,
+                'email' => $booking->guest_email,
+                'phone' => $booking->guest_phone ?? '',
+            ],
+            expiresAt   : $expiresAt,
+        );
+
+        $vaNumber = trim(
+            $result['virtualAccountData']['virtualAccountNo']
+            ?? $result['virtualAccountNo']
+            ?? $result['_va_number']
+            ?? ''
+        ) ?: null;
+
         $payment = Payment::create([
             'booking_id'     => $booking->id,
             'amount'         => $booking->total_price,
             'method'         => $paymentMethod,
-            'gateway'        => 'midtrans',
-            'gateway_trx_id' => $response->transaction_id ?? null,
+            'gateway'        => 'doku',
+            'gateway_trx_id' => $result['trxId'] ?? $booking->booking_code,
             'status'         => 'pending',
-            'expired_at'     => now()->addHour(),
-            'payload'        => (array) $response,
+            'expired_at'     => $expiresAt,
+            'payload'        => $result,
         ]);
 
-        // Extract VA number
-        $vaNumber = $response->va_numbers[0]->va_number
-            ?? $response->payment_code
-            ?? null;
-
         return [
-            'payment'         => $payment,
-            'va_number'       => $vaNumber,
-            'gateway_response'=> $response,
+            'payment'    => $payment,
+            'va_number'  => $vaNumber,
+            'bank'       => strtoupper($paymentMethod),
+            'expired_at' => $expiresAt->toIso8601String(),
         ];
     }
 
     /**
-     * Handle Midtrans webhook notification
+     * Handle DOKU SNAP webhook notification.
+     * Pass the raw request body string and all request headers.
      */
-    public function handleWebhook(array $payload): void
+    public function handleWebhook(string $rawBody, array $headers, string $webhookPath): void
     {
-        try {
-            $notification = new Notification();
-        } catch (\Exception $e) {
-            throw new \RuntimeException('Invalid webhook: ' . $e->getMessage());
+        if (!$this->doku->verifyWebhook($headers, $rawBody, $webhookPath)) {
+            throw new \RuntimeException('Invalid DOKU webhook signature.');
         }
 
-        $orderId   = $notification->order_id;
-        $txStatus  = $notification->transaction_status;
-        $fraudStatus = $notification->fraud_status ?? 'accept';
+        $payload = json_decode($rawBody, true);
 
-        $booking = Booking::where('booking_code', $orderId)->first();
+        // SNAP payment notification — trxId is our booking_code
+        $bookingCode = $payload['trxId'] ?? null;
+        if (!$bookingCode) return;
+
+        $booking = Booking::where('booking_code', $bookingCode)->first();
         if (!$booking) return;
 
-        if (in_array($txStatus, ['capture', 'settlement']) && $fraudStatus === 'accept') {
-            // Payment success
+        // SNAP success: paidAmount present and equals totalAmount
+        $paidAmount  = (float) ($payload['paidAmount']['value']  ?? 0);
+        $totalAmount = (float) ($payload['totalAmount']['value'] ?? 0);
+        $flagAdvise  = $payload['flagAdvise'] ?? 'N';
+
+        if ($paidAmount >= $totalAmount && $flagAdvise === 'N') {
             Payment::where('booking_id', $booking->id)
-                   ->where('gateway', 'midtrans')
+                   ->where('gateway', 'doku')
                    ->update([
                        'status'  => 'settlement',
                        'paid_at' => now(),
-                       'payload' => (array)$notification,
+                       'payload' => $payload,
                    ]);
 
             $booking->update(['status' => 'paid']);
-
-            // Issue booking
             app(BookingService::class)->issue($booking);
-
-        } elseif (in_array($txStatus, ['cancel', 'deny', 'expire'])) {
-            Payment::where('booking_id', $booking->id)
-                   ->where('gateway', 'midtrans')
-                   ->update(['status' => $txStatus === 'expire' ? 'expired' : 'failed']);
-
-            $booking->update(['status' => 'canceled']);
         }
     }
 }

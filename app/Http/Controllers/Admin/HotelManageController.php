@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Hotel;
+use App\Models\MarketManagerOwner;
 use App\Services\ActivityLogService;
+use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -12,7 +14,17 @@ class HotelManageController extends Controller
 {
     public function index(Request $request)
     {
+        $user  = $request->user();
         $query = Hotel::with('owner:id,name,email');
+
+        // Market Manager: filter to assigned owners only
+        if ($user->hasRole('admin')) {
+            $ownerIds = MarketManagerOwner::where('market_manager_id', $user->id)->pluck('owner_id');
+            if ($ownerIds->isEmpty()) {
+                return response()->json(['success' => true, 'data' => [], 'pagination' => ['total' => 0, 'totalPages' => 1, 'page' => 1]]);
+            }
+            $query->whereIn('owner_id', $ownerIds);
+        }
 
         if ($search = $request->search) {
             $query->where(fn($q) => $q
@@ -134,6 +146,13 @@ class HotelManageController extends Controller
         $hotel->update(['status' => 'approved', 'approved_by' => $request->user()->id, 'approved_at' => now()]);
         ActivityLogService::log($request->user()->id, 'APPROVE_HOTEL', 'hotel', $id, $request);
 
+        NotificationService::send(
+            $hotel->owner_id, 'hotel_approved',
+            'Hotel Disetujui! 🎉',
+            "Hotel \"{$hotel->name}\" Anda telah disetujui dan sekarang aktif di platform.",
+            ['hotel_id' => $hotel->id, 'hotel_name' => $hotel->name]
+        );
+
         return response()->json(['success' => true, 'message' => 'Hotel disetujui.', 'data' => $hotel]);
     }
 
@@ -143,13 +162,20 @@ class HotelManageController extends Controller
         $hotel->update(['status' => 'blocked']);
         ActivityLogService::log($request->user()->id, 'BLOCK_HOTEL', 'hotel', $id, $request);
 
+        NotificationService::send(
+            $hotel->owner_id, 'hotel_blocked',
+            'Hotel Diblokir',
+            "Hotel \"{$hotel->name}\" Anda telah diblokir oleh admin. Hubungi kami untuk informasi lebih lanjut.",
+            ['hotel_id' => $hotel->id, 'hotel_name' => $hotel->name]
+        );
+
         return response()->json(['success' => true, 'message' => 'Hotel diblokir.']);
     }
 
     private function uploadImages(Request $request, array $existing): array
     {
         $allowed = ['jpg', 'jpeg', 'png', 'webp'];
-        $dir     = public_path('uploads/hotels');
+        $dir     = storage_path('app/public/uploads/hotels');
         if (!is_dir($dir)) mkdir($dir, 0755, true);
 
         $urls = $existing;
@@ -163,8 +189,11 @@ class HotelManageController extends Controller
                 if ($file->getSize() > 10 * 1024 * 1024) continue;
 
                 $filename = 'hotel_' . time() . '_' . uniqid() . '.' . $ext;
+                $oldUmask = umask(0022);
                 $file->move($dir, $filename);
-                $urls[] = url('uploads/hotels/' . $filename);
+                umask($oldUmask);
+                @chmod($dir . DIRECTORY_SEPARATOR . $filename, 0644);
+                $urls[] = 'uploads/hotels/' . $filename;
             }
         }
 

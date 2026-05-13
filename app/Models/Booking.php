@@ -8,7 +8,7 @@ class Booking extends Model
     use HasFactory;
     protected $fillable = [
         'booking_code','user_id','hotel_id','room_id',
-        'check_in','check_out','total_nights','guests',
+        'check_in','check_out','total_nights','guests','room_count',
         'base_price','markup_amount','promo_discount','loyalty_discount',
         'tax_amount','total_price','price_suffix',
         'status','promo_id','voucher_code','notes',
@@ -18,12 +18,12 @@ class Booking extends Model
     protected $casts = [
         'check_in'         => 'date',
         'check_out'        => 'date',
-        'base_price'       => 'decimal:2',
-        'markup_amount'    => 'decimal:2',
-        'promo_discount'   => 'decimal:2',
-        'loyalty_discount' => 'decimal:2',
-        'tax_amount'       => 'decimal:2',
-        'total_price'      => 'decimal:2',
+        'base_price'       => 'float',
+        'markup_amount'    => 'float',
+        'promo_discount'   => 'float',
+        'loyalty_discount' => 'float',
+        'tax_amount'       => 'float',
+        'total_price'      => 'float',
         'expires_at'       => 'datetime',
         'issued_at'        => 'datetime',
         'canceled_at'      => 'datetime',

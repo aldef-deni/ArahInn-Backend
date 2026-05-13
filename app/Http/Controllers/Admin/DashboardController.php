@@ -15,31 +15,74 @@ class DashboardController extends Controller
 {
     public function index()
     {
-        $thisMonth = now()->startOfMonth();
+        $thisMonthStart = now()->startOfMonth();
+        $lastMonthStart = now()->copy()->subMonthNoOverflow()->startOfMonth();
+        $lastMonthEnd = $thisMonthStart->copy()->subSecond();
 
-        [$totalUsers, $totalHotels, $totalBookings, $totalRevenue,
-         $bookingsThisMonth, $revenueThisMonth, $pendingBookings,
-         $recentBookings, $byStatus] = [
-            User::count(),
-            Hotel::where('status', 'approved')->count(),
-            Booking::count(),
-            Payment::where('status', 'settlement')->sum('amount'),
-            Booking::where('created_at', '>=', $thisMonth)->count(),
-            Payment::where('status', 'settlement')->where('created_at', '>=', $thisMonth)->sum('amount'),
-            Booking::where('status', 'pending')->count(),
-            Booking::with(['user:id,name', 'hotel:id,name'])
-                ->orderBy('created_at', 'desc')->limit(10)->get(),
-            Booking::select('status', DB::raw('count(*) as count'))
-                ->groupBy('status')->pluck('count', 'status'),
-        ];
+        $totalUsers = User::count();
+        $activeHotels = Hotel::where('status', 'approved')->count();
+        $pendingHotels = Hotel::where('status', 'pending')->count();
+        $totalBookings = Booking::count();
+        $totalRevenue = Payment::where('status', 'settlement')->sum('amount');
+
+        $bookingsThisMonth = Booking::where('created_at', '>=', $thisMonthStart)->count();
+        $bookingsLastMonth = Booking::whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
+
+        $revenueThisMonth = Payment::where('status', 'settlement')
+            ->where(function ($query) use ($thisMonthStart) {
+                $query->where('paid_at', '>=', $thisMonthStart)
+                    ->orWhere(function ($subQuery) use ($thisMonthStart) {
+                        $subQuery->whereNull('paid_at')->where('created_at', '>=', $thisMonthStart);
+                    });
+            })
+            ->sum('amount');
+
+        $revenueLastMonth = Payment::where('status', 'settlement')
+            ->where(function ($query) use ($lastMonthStart, $lastMonthEnd) {
+                $query->whereBetween('paid_at', [$lastMonthStart, $lastMonthEnd])
+                    ->orWhere(function ($subQuery) use ($lastMonthStart, $lastMonthEnd) {
+                        $subQuery->whereNull('paid_at')->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd]);
+                    });
+            })
+            ->sum('amount');
+
+        $newUsersThisMonth = User::where('created_at', '>=', $thisMonthStart)->count();
+        $newUsersLastMonth = User::whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
+
+        $newHotelsThisMonth = Hotel::where('status', 'approved')->where('created_at', '>=', $thisMonthStart)->count();
+        $newHotelsLastMonth = Hotel::where('status', 'approved')->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
+
+        $pendingBookings = Booking::where('status', 'pending')->count();
+
+        $recentBookings = Booking::with(['user:id,name', 'hotel:id,name', 'room:id,name,type'])
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get();
+
+        $byStatus = Booking::select('status', DB::raw('count(*) as count'))
+            ->groupBy('status')
+            ->pluck('count', 'status');
 
         return response()->json([
             'success' => true,
             'data' => [
-                'summary' => compact(
-                    'totalUsers', 'totalHotels', 'totalBookings', 'totalRevenue',
-                    'bookingsThisMonth', 'revenueThisMonth', 'pendingBookings'
-                ),
+                'summary' => [
+                    'total_users' => $totalUsers,
+                    'total_hotels' => $activeHotels,
+                    'active_hotels' => $activeHotels,
+                    'pending_hotels' => $pendingHotels,
+                    'total_bookings' => $totalBookings,
+                    'total_revenue' => $totalRevenue,
+                    'bookings_this_month' => $bookingsThisMonth,
+                    'revenue_this_month' => $revenueThisMonth,
+                    'pending_bookings' => $pendingBookings,
+                    'trends' => [
+                        'revenue' => $this->calculateTrend($revenueThisMonth, $revenueLastMonth),
+                        'bookings' => $this->calculateTrend($bookingsThisMonth, $bookingsLastMonth),
+                        'users' => $this->calculateTrend($newUsersThisMonth, $newUsersLastMonth),
+                        'hotels' => $this->calculateTrend($newHotelsThisMonth, $newHotelsLastMonth),
+                    ],
+                ],
                 'recent_bookings' => $recentBookings,
                 'bookings_by_status' => $byStatus,
             ],
@@ -64,5 +107,14 @@ class DashboardController extends Controller
             'data' => $result->items(),
             'pagination' => ['total' => $result->total()],
         ]);
+    }
+
+    private function calculateTrend(float|int $current, float|int $previous): int
+    {
+        if ((float) $previous === 0.0) {
+            return (float) $current > 0 ? 100 : 0;
+        }
+
+        return (int) round(((($current - $previous) / $previous) * 100));
     }
 }

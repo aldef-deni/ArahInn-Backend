@@ -97,7 +97,7 @@ class ChatController extends Controller
         $hotel = \App\Models\Hotel::where('owner_id', $request->user()->id)->first();
 
         if (!$hotel) {
-            return response()->json(['success' => false, 'message' => 'Properti tidak ditemukan.'], 404);
+            return response()->json(['success' => true, 'data' => []]);
         }
 
         $rooms = ChatRoom::where('hotel_id', $hotel->id)

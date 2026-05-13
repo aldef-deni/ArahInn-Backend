@@ -9,6 +9,7 @@ return [
         'https://staging.arahinn.com',
         'https://arahinn.com',
         'https://extranet.arahinn.com',
+        'https://kelola.arahinn.com',
         'http://localhost:5173',
     ],
 

@@ -41,4 +41,12 @@ return [
         'redirect'      => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    'doku' => [
+        'client_id'          => env('DOKU_CLIENT_ID'),
+        'secret_key'         => env('DOKU_SECRET_KEY'),
+        'private_key_path'   => env('DOKU_PRIVATE_KEY_PATH'),
+        'partner_service_id' => env('DOKU_PARTNER_SERVICE_ID'),
+        'base_url'           => env('DOKU_BASE_URL', 'https://api-sandbox.doku.com'),
+    ],
+
 ];

@@ -107,59 +107,8 @@ class BookingConfirmationMail extends Mailable implements ShouldQueue
     }
 }
 
-// =====================================================
-// BOOKING ISSUED
-// =====================================================
-class BookingIssuedMail extends Mailable implements ShouldQueue
-{
-    use Queueable, SerializesModels;
-    public function __construct(public Booking $booking) {}
-
-    public function envelope(): Envelope {
-        return new Envelope(subject: "Pembayaran Berhasil — Booking {$this->booking->booking_code} Dikonfirmasi 🎊");
-    }
-
-    public function content(): Content {
-        $b = $this->booking;
-        $body = "<h2>Pembayaran Berhasil! 🎊</h2>
-<p>Halo <strong>{$b->guest_name}</strong>, booking Anda telah ISSUED.</p>
-<div class='info-box'>
-  <div class='row'><span class='label'>Kode Booking</span><span class='val'>{$b->booking_code}</span></div>
-  <div class='row'><span class='label'>Status</span><span class='val'><span class='badge badge-success'>✓ ISSUED</span></span></div>
-  <div class='row'><span class='label'>Hotel</span><span class='val'>{$b->hotel?->name}</span></div>
-  <div class='row'><span class='label'>Check-in</span><span class='val'>{$b->check_in?->format('d M Y')}</span></div>
-  <div class='row'><span class='label'>Check-out</span><span class='val'>{$b->check_out?->format('d M Y')}</span></div>
-</div>
-<p>Tunjukkan kode booking ini saat check-in.</p>
-<a class='btn' href='" . config('app.frontend_url') . "/orders/{$b->id}'>Lihat Detail</a>";
-        return new Content(htmlString: baseHtml('Booking Dikonfirmasi', $body));
-    }
-}
-
-// =====================================================
-// BOOKING CANCELED
-// =====================================================
-class BookingCanceledMail extends Mailable implements ShouldQueue
-{
-    use Queueable, SerializesModels;
-    public function __construct(public Booking $booking) {}
-
-    public function envelope(): Envelope {
-        return new Envelope(subject: "Booking {$this->booking->booking_code} Dibatalkan");
-    }
-
-    public function content(): Content {
-        $b = $this->booking;
-        $body = "<h2>Booking Dibatalkan</h2>
-<p>Halo <strong>{$b->guest_name}</strong>, booking Anda telah dibatalkan.</p>
-<div class='info-box'>
-  <div class='row'><span class='label'>Kode Booking</span><span class='val'>{$b->booking_code}</span></div>
-  <div class='row'><span class='label'>Status</span><span class='val'><span class='badge badge-danger'>CANCELED</span></span></div>
-</div>
-<p>Jika Anda tidak membatalkan ini, segera hubungi CS kami.</p>";
-        return new Content(htmlString: baseHtml('Booking Dibatalkan', $body));
-    }
-}
+// BookingIssuedMail  → app/Mail/BookingIssuedMail.php  (Blade template)
+// BookingCanceledMail → app/Mail/BookingCanceledMail.php (Blade template)
 
 // =====================================================
 // NEW RESERVATION (dikirim ke Owner Hotel)
