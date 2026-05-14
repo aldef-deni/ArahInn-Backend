@@ -21,6 +21,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth'       => \App\Http\Middleware\Authenticate::class,
         ]);
 
+        // Handle CORS globally (must run before any route/auth middleware)
+        $middleware->prepend(\Illuminate\Http\Middleware\HandleCors::class);
+
         $middleware->api(prepend: [
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
         ]);
