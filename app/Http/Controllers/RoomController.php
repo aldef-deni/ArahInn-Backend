@@ -52,7 +52,7 @@ class RoomController extends Controller
             'images' => 'nullable|array',
             'images.*' => 'string',
             'image_files' => 'nullable|array',
-            'image_files.*' => 'image|max:5120',
+            'image_files.*' => 'image|max:5120|dimensions:min_width=1024,min_height=1024',
         ]);
 
         $data['hotel_id'] = $hotelId;
@@ -80,7 +80,7 @@ class RoomController extends Controller
             'existing_images' => 'nullable|array',
             'existing_images.*' => 'string',
             'image_files' => 'nullable|array',
-            'image_files.*' => 'image|max:5120',
+            'image_files.*' => 'image|max:5120|dimensions:min_width=1024,min_height=1024',
         ]);
 
         if ($request->has('images') || $request->has('existing_images') || $request->hasFile('image_files')) {

@@ -25,7 +25,7 @@ class Hotel extends Model
         // Fasilitas & Foto
         'facilities','images',
         // Kebijakan
-        'gender_policy','marriage_book','deposit_required','all_ages_allowed',
+        'gender_policy','marriage_book','deposit_required','all_ages_allowed','min_age',
         'breakfast_available','breakfast_start','breakfast_end',
         'smoking_allowed','alcohol_allowed','pets_allowed',
         // Pembayaran

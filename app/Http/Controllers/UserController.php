@@ -33,7 +33,7 @@ class UserController extends Controller
 
     public function updateAvatar(Request $request)
     {
-        $request->validate(['avatar' => 'required|max:10240']);
+        $request->validate(['avatar' => 'required|image|mimes:jpg,jpeg,png|max:5120|dimensions:min_width=256,min_height=256']);
 
         $user = $request->user();
         $file = $request->file('avatar');
@@ -88,7 +88,7 @@ class UserController extends Controller
 
     public function index(Request $request)
     {
-        $pengelolaRoles = ['superadmin', 'admin', 'owner', 'finance'];
+        $pengelolaRoles = ['superadmin', 'admin', 'owner', 'finance', 'design_interior'];
         $caller         = $request->user();
 
         $query = User::with('roles')->withCount('hotels');

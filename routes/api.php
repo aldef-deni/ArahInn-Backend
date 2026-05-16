@@ -27,6 +27,8 @@ use App\Http\Controllers\RoomPriceController;
 use App\Http\Controllers\HotelFeeController;
 use App\Http\Controllers\HotelSettingsController;
 use App\Http\Controllers\OwnerDashboardController;
+use App\Http\Controllers\InteriorInquiryController;
+use App\Http\Controllers\InteriorDesignController;
 
 /*
 |--------------------------------------------------------------------------
@@ -98,6 +100,12 @@ Route::prefix('properties')->group(function () {
     Route::post('/{id}/reject',  [PropertyListingController::class, 'reject'])
         ->middleware(['auth:sanctum', 'role:superadmin']);
 });
+
+// ── Interior Designs (Public — gallery untuk customer & owner) ───────
+Route::get('/interior-designs', [InteriorDesignController::class, 'publicIndex']);
+
+// ── Interior Inquiries — submit publik (no auth required) ────────────
+Route::post('/interior-inquiries', [InteriorInquiryController::class, 'store']);
 
 // ── Payment Webhooks (Public — no auth) ──────────────
 Route::post('/payments/webhook/doku', [PaymentController::class, 'webhookDoku']);
@@ -314,5 +322,21 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('role:superadmin');
         Route::post('/settings/payment-gateways', [SettingController::class, 'setGateway'])
             ->middleware('role:superadmin');
+    });
+
+    // ── Interior Designs ─────────────────────────────────────────────
+    Route::prefix('admin/interior-designs')->middleware('role:superadmin|admin|owner|design_interior')->group(function () {
+        Route::get('/',                  [InteriorDesignController::class, 'index']);
+        Route::post('/',                 [InteriorDesignController::class, 'store']);
+        Route::post('/{id}',             [InteriorDesignController::class, 'update']); // POST karena multipart/form-data
+        Route::delete('/{id}',           [InteriorDesignController::class, 'destroy']);
+        Route::post('/{id}/approve',     [InteriorDesignController::class, 'approve'])->middleware('role:superadmin');
+        Route::post('/{id}/reject',      [InteriorDesignController::class, 'reject'])->middleware('role:superadmin');
+    });
+
+    // ── Interior Inquiries — admin list & status (auth required) ────────
+    Route::prefix('interior-inquiries')->middleware('role:superadmin|admin')->group(function () {
+        Route::get('/',           [InteriorInquiryController::class, 'index']);
+        Route::put('/{id}/status',[InteriorInquiryController::class, 'updateStatus']);
     });
 });

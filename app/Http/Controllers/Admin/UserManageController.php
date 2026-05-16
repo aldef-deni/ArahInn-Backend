@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Hash;
 
 class UserManageController extends Controller
 {
-    private const ROLES = ['superadmin','owner','admin_property','admin','finance','user'];
+    private const ROLES = ['superadmin','owner','admin_property','admin','finance','design_interior','user'];
 
     public function store(Request $request)
     {

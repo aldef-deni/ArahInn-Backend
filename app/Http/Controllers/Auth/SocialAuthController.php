@@ -4,35 +4,49 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use Illuminate\Http\Request;
 use Laravel\Socialite\Facades\Socialite;
 
 class SocialAuthController extends Controller
 {
-    public function redirectGoogle()
+    public function redirectGoogle(Request $request)
     {
-        return Socialite::driver('google')->stateless()->redirect();
+        $driver = Socialite::driver('google')->stateless();
+        if ($request->boolean('mobile')) {
+            $driver = $driver->with(['state' => 'mobile']);
+        }
+        return $driver->redirect();
     }
 
-    public function callbackGoogle()
+    public function callbackGoogle(Request $request)
     {
-        return $this->handleCallback('google');
+        $isMobile = $request->input('state') === 'mobile';
+        return $this->handleCallback('google', $isMobile);
     }
 
-    public function redirectFacebook()
+    public function redirectFacebook(Request $request)
     {
-        return Socialite::driver('facebook')->stateless()->redirect();
+        $driver = Socialite::driver('facebook')->stateless();
+        if ($request->boolean('mobile')) {
+            $driver = $driver->with(['state' => 'mobile']);
+        }
+        return $driver->redirect();
     }
 
-    public function callbackFacebook()
+    public function callbackFacebook(Request $request)
     {
-        return $this->handleCallback('facebook');
+        $isMobile = $request->input('state') === 'mobile';
+        return $this->handleCallback('facebook', $isMobile);
     }
 
-    private function handleCallback(string $provider)
+    private function handleCallback(string $provider, bool $isMobile = false)
     {
         try {
             $socialUser = Socialite::driver($provider)->stateless()->user();
         } catch (\Exception $e) {
+            if ($isMobile) {
+                return redirect('arahinn://auth/callback?error=oauth_failed');
+            }
             $frontendUrl = config('app.frontend_url');
             return redirect("{$frontendUrl}/login?error=oauth_failed");
         }
@@ -60,9 +74,13 @@ class SocialAuthController extends Controller
             }
         }
 
-        $token       = $user->createToken('auth-token')->plainTextToken;
-        $frontendUrl = config('app.frontend_url');
+        $token = $user->createToken('auth-token')->plainTextToken;
 
+        if ($isMobile) {
+            return redirect("arahinn://auth/callback?token={$token}");
+        }
+
+        $frontendUrl = config('app.frontend_url');
         return redirect("{$frontendUrl}/auth/callback?token={$token}");
     }
 }

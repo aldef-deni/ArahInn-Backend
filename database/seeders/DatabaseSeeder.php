@@ -12,7 +12,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // ── Buat Roles ────────────────────────────────────
-        $roles = ['superadmin', 'owner', 'admin_property', 'admin', 'finance', 'user'];
+        $roles = ['superadmin', 'owner', 'admin_property', 'admin', 'finance', 'design_interior', 'user'];
         foreach ($roles as $role) {
             Role::firstOrCreate(['name' => $role, 'guard_name' => 'web']);
         }

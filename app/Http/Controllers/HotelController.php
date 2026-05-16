@@ -183,6 +183,7 @@ class HotelController extends Controller
             'marriage_book'       => $bool($request->input('marriage_book')),
             'deposit_required'    => $bool($request->input('deposit_required')),
             'all_ages_allowed'    => $bool($request->input('all_ages_allowed')),
+            'min_age'             => $request->filled('min_age') ? (int) $request->input('min_age') : null,
             'breakfast_available' => $bool($request->input('breakfast_available')),
             'breakfast_start'     => $bfStart,
             'breakfast_end'       => $bfEnd,
@@ -276,7 +277,7 @@ class HotelController extends Controller
             'city'        => 'sometimes|string',
             'star_rating' => 'nullable|integer|min:1|max:5',
             'facilities'  => 'nullable|array',
-            'images.*'    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:10240',
+            'images.*'    => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120|dimensions:min_width=1024,min_height=1024',
         ]);
 
         if ($request->hasFile('images') || $request->has('existing_images')) {
