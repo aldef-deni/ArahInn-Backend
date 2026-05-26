@@ -86,7 +86,7 @@ class PropertyListingController extends Controller
             'facilities'      => 'nullable|array',
             'contact_phone'   => 'nullable|string|max:30',
             'contact_email'   => 'nullable|email|max:100',
-            'images.*'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120|dimensions:min_width=1024,min_height=1024',
+            'images.*'        => 'nullable|image|mimes:jpg,jpeg|max:5120|dimensions:min_width=800,min_height=800',
         ]);
 
         $data['owner_id']         = $user->id;
@@ -148,7 +148,7 @@ class PropertyListingController extends Controller
             'facilities'      => 'nullable|array',
             'contact_phone'   => 'nullable|string|max:30',
             'contact_email'   => 'nullable|email|max:100',
-            'images.*'        => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120|dimensions:min_width=1024,min_height=1024',
+            'images.*'        => 'nullable|image|mimes:jpg,jpeg|max:5120|dimensions:min_width=800,min_height=800',
         ]);
 
         if ($request->has('price_negotiable')) {

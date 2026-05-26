@@ -66,9 +66,28 @@
 <body>
 <div class="page">
 
+  @php
+    $logoPaths = [
+        public_path('logo-arahin.png'),
+        public_path('logo-arahinn.png'),
+        public_path('logo.png'),
+    ];
+    $logoBase64 = null;
+    foreach ($logoPaths as $p) {
+        if (is_file($p)) {
+            $logoBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($p));
+            break;
+        }
+    }
+  @endphp
+
   <!-- Header -->
   <div class="header">
-    <div class="brand">ArahInn.com</div>
+    @if ($logoBase64)
+      <img src="{{ $logoBase64 }}" alt="Arahinn" style="height:42px; width:auto; margin-bottom:8px;">
+    @else
+      <div class="brand">ArahInn.com</div>
+    @endif
     <div class="subtitle">Platform Pemesanan Akomodasi Terpercaya Indonesia</div>
     <div class="doc-title">PERJANJIAN KEMITRAAN AKOMODASI</div>
     <div class="doc-number">No. PKA/{{ date('Y') }}/{{ str_pad($hotel->id, 5, '0', STR_PAD_LEFT) }} &mdash; {{ $date }}</div>

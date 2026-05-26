@@ -13,6 +13,16 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__ . '/../routes/console.php',
         health: '/up',
     )
+    ->withCommands([
+        __DIR__ . '/../app/Console/Commands',
+    ])
+    ->withSchedule(function (\Illuminate\Console\Scheduling\Schedule $schedule) {
+        // Dispatch terjadwal: payment expired, booking completed, reminders, review invitation
+        $schedule->command('arahinn:dispatch-notifications')
+            ->everyTenMinutes()
+            ->withoutOverlapping()
+            ->runInBackground();
+    })
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
             'role'       => \Spatie\Permission\Middleware\RoleMiddleware::class,

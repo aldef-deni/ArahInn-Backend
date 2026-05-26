@@ -2,6 +2,7 @@
 namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Str;
 
 class Hotel extends Model
 {
@@ -9,7 +10,7 @@ class Hotel extends Model
     protected $fillable = [
         // Core
         'owner_id','name','alias','category','slug','description',
-        'is_brand_chain','currency','star_rating',
+        'is_brand_chain','currency','commission_percent','star_rating',
         // Lokasi
         'address','city','district','village','province','country',
         'postal_code','latitude','longitude',
@@ -20,10 +21,14 @@ class Hotel extends Model
         // Legalitas
         'company_name','company_address','company_country',
         'agree_name','agree_position','agree_email','agree_phone',
+        'voucher_emails',
         // Platform
         'platforms',
         // Fasilitas & Foto
         'facilities','images',
+        // Info check-in
+        'booking_min_age','check_in_24h',
+        'check_in_start','check_in_end','check_out_start','check_out_end',
         // Kebijakan
         'gender_policy','marriage_book','deposit_required','all_ages_allowed','min_age',
         'breakfast_available','breakfast_start','breakfast_end',
@@ -46,6 +51,7 @@ class Hotel extends Model
         'guest_types'        => 'array',
         'platforms'          => 'array',
         'vcc_accepted_types' => 'array',
+        'voucher_emails'     => 'array',
         'is_brand_chain'     => 'boolean',
         'gender_policy'      => 'boolean',
         'marriage_book'      => 'boolean',
@@ -55,7 +61,10 @@ class Hotel extends Model
         'smoking_allowed'    => 'boolean',
         'alcohol_allowed'    => 'boolean',
         'pets_allowed'       => 'boolean',
+        'check_in_24h'       => 'boolean',
+        'booking_min_age'    => 'integer',
         'star_rating'        => 'integer',
+        'commission_percent' => 'decimal:2',
         'latitude'           => 'decimal:8',
         'longitude'          => 'decimal:8',
         'approved_at'        => 'datetime',
@@ -71,4 +80,24 @@ class Hotel extends Model
     public function reviews()   { return $this->hasMany(Review::class); }
 
     public function scopeApproved($q) { return $q->where('status', 'approved'); }
+
+    /**
+     * Generate slug yang unik dari nama hotel.
+     * Kalau slug sudah dipakai, append -2, -3, dst.
+     * Pass $excludeId saat update agar tidak collision dengan dirinya sendiri.
+     */
+    public static function generateUniqueSlug(string $name, ?int $excludeId = null): string
+    {
+        $base = Str::slug($name) ?: 'hotel';
+        $slug = $base;
+        $i    = 2;
+        while (
+            static::where('slug', $slug)
+                ->when($excludeId, fn($q) => $q->where('id', '!=', $excludeId))
+                ->exists()
+        ) {
+            $slug = $base . '-' . $i++;
+        }
+        return $slug;
+    }
 }

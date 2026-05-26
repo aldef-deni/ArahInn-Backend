@@ -61,10 +61,13 @@ class HotelManageController extends Controller
             'star_rating' => 'nullable|integer|min:1|max:5',
             'facilities'  => 'nullable|array',
             'status'      => 'nullable|in:pending,approved,blocked',
-            'owner_id'    => 'nullable|exists:users,id',
+            'owner_id'    => 'required|exists:users,id',
+        ], [
+            'owner_id.required' => 'Pemilik (Owner) wajib dipilih sebelum hotel baru disimpan.',
+            'owner_id.exists'   => 'Pemilik (Owner) yang dipilih tidak valid.',
         ]);
 
-        $data['slug']   = Str::slug($data['name']) . '-' . time();
+        $data['slug']   = Hotel::generateUniqueSlug($data['name']);
         $data['status'] = $data['status'] ?? 'approved';
 
         if ($data['status'] === 'approved') {
@@ -128,6 +131,39 @@ class HotelManageController extends Controller
         $hotel->delete();
 
         return response()->json(['success' => true, 'message' => 'Hotel berhasil dihapus.']);
+    }
+
+    /**
+     * Update komisi platform untuk sebuah hotel.
+     * Markup final di PricingService = commission_percent + 2% bonus.
+     */
+    public function updateCommission(Request $request, string $id)
+    {
+        $hotel = Hotel::findOrFail($id);
+
+        $data = $request->validate([
+            'commission_percent' => 'required|numeric|min:0|max:100',
+        ]);
+
+        $hotel->update($data);
+        ActivityLogService::log(
+            $request->user()->id,
+            'ADMIN_UPDATE_COMMISSION',
+            'hotel',
+            $id,
+            $request
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => "Komisi {$hotel->name} berhasil disetel ke {$hotel->commission_percent}% (markup final " . ($hotel->commission_percent + 2) . "%).",
+            'data'    => [
+                'id'                 => $hotel->id,
+                'name'               => $hotel->name,
+                'commission_percent' => (float) $hotel->commission_percent,
+                'markup_percent'     => (float) $hotel->commission_percent + 2,
+            ],
+        ]);
     }
 
     public function pending()

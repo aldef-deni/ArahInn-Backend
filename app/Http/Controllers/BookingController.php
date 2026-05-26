@@ -96,9 +96,17 @@ class BookingController extends Controller
 
     public function show(Request $request, string $id)
     {
-        $booking = Booking::with(['hotel', 'room', 'payments', 'user:id,name,email'])->findOrFail($id);
-        $user = $request->user();
+        // Terima id numeric ATAU booking_code (URL ramah, mis. /orders/ARH123456)
+        $query = Booking::with(['hotel', 'room', 'payments', 'user:id,name,email']);
+        $booking = is_numeric($id)
+            ? $query->find($id)
+            : $query->where('booking_code', $id)->first();
 
+        if (!$booking) {
+            return response()->json(['success' => false, 'message' => 'Pesanan tidak ditemukan.'], 404);
+        }
+
+        $user = $request->user();
         $adminRoles = ['superadmin', 'admin', 'finance'];
         if (!in_array($user->getRoleNames()->first(), $adminRoles) && (int) $booking->user_id !== (int) $user->id) {
             return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
@@ -119,6 +127,8 @@ class BookingController extends Controller
             return response()->json(['success' => false, 'message' => 'Booking sudah dibatalkan.'], 400);
         }
 
+        $wasPaid = in_array($booking->status, ['paid', 'issued', 'rescheduled']);
+
         $this->booking->cancel($booking);
         ActivityLogService::log($user->id, 'CANCEL_BOOKING', 'booking', $id, $request);
 
@@ -137,6 +147,22 @@ class BookingController extends Controller
             "Booking #{$booking->booking_code} Anda telah dibatalkan.",
             ['booking_id' => $booking->id, 'booking_code' => $booking->booking_code]
         );
+
+        // Kalau booking sebelumnya sudah dibayar → ini permintaan refund. Notif ke finance/admin.
+        if ($wasPaid) {
+            NotificationService::sendToRoles(
+                ['superadmin', 'admin', 'finance'],
+                'booking_refund_request',
+                'Permintaan refund baru',
+                "Booking #{$booking->booking_code} ({$booking->guest_name}) butuh refund Rp " . number_format($booking->total_price, 0, ',', '.') . ".",
+                [
+                    'booking_id'   => $booking->id,
+                    'booking_code' => $booking->booking_code,
+                    'amount'       => (float) $booking->total_price,
+                    'guest_name'   => $booking->guest_name,
+                ]
+            );
+        }
 
         return response()->json(['success' => true, 'message' => 'Booking dibatalkan.', 'data' => $booking->fresh()]);
     }
@@ -192,11 +218,112 @@ class BookingController extends Controller
         return response()->json(['success' => true, 'data' => $booking]);
     }
 
+    /**
+     * Kirim ulang e-voucher booking ke email tamu.
+     * Customer (pemilik booking) atau admin/superadmin/finance bisa pakai endpoint ini.
+     */
+    public function resendVoucher(Request $request, string $id)
+    {
+        $booking = Booking::with('hotel')->findOrFail($id);
+        $user = $request->user();
+
+        $isAdmin = in_array($user->getRoleNames()->first(), ['superadmin', 'admin', 'finance']);
+        if (!$isAdmin && (int) $booking->user_id !== (int) $user->id) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
+        }
+        if (!in_array($booking->status, ['paid', 'issued', 'rescheduled'])) {
+            return response()->json(['success' => false, 'message' => 'Booking belum dibayar, voucher belum bisa dikirim.'], 400);
+        }
+
+        try {
+            \Illuminate\Support\Facades\Mail::to($booking->guest_email)
+                ->send(new \App\Mail\BookingIssuedMail($booking));
+        } catch (\Throwable $e) {
+            logger()->error('ResendVoucher failed', [
+                'booking_code' => $booking->booking_code,
+                'error'        => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengirim voucher. ' . $e->getMessage(),
+            ], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Voucher telah dikirim ulang ke {$booking->guest_email}.",
+        ]);
+    }
+
+    /**
+     * Stream e-voucher PDF langsung ke client (untuk download).
+     * Bisa diakses customer (pemilik booking), owner hotel, atau admin.
+     */
+    public function downloadVoucher(Request $request, string $id)
+    {
+        $booking = Booking::with(['hotel:id,name,owner_id', 'room:id,name'])->findOrFail($id);
+        $user    = $request->user();
+
+        // Otorisasi: admin/superadmin/finance, customer pemilik booking, atau owner hotel
+        $roles      = $user->getRoleNames();
+        $isAdmin    = $roles->contains(fn($r) => in_array($r, ['superadmin','admin','finance']));
+        $isCustomer = (int) $booking->user_id === (int) $user->id;
+        $isOwner    = $roles->contains('owner') && (int) $booking->hotel?->owner_id === (int) $user->id;
+
+        if (!$isAdmin && !$isCustomer && !$isOwner) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
+        }
+
+        if (!in_array($booking->status, ['paid', 'issued', 'rescheduled'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Voucher hanya tersedia untuk booking yang sudah dibayar.',
+            ], 400);
+        }
+
+        $booking->load(['hotel', 'room']);
+        $payload = [
+            'booking'     => $booking,
+            'hotel'       => $booking->hotel,
+            'room'        => $booking->room,
+            'checkIn'     => $booking->check_in->translatedFormat('D, d M Y'),
+            'checkOut'    => $booking->check_out->translatedFormat('D, d M Y'),
+            'nights'      => $booking->total_nights,
+            'totalPrice'  => number_format($booking->total_price, 0, ',', '.'),
+            'basePrice'   => number_format($booking->base_price, 0, ',', '.'),
+            'markupAmt'   => number_format($booking->markup_amount, 0, ',', '.'),
+            'taxAmt'      => number_format($booking->tax_amount, 0, ',', '.'),
+            'promoDisc'   => number_format($booking->promo_discount ?? 0, 0, ',', '.'),
+            'loyaltyDisc' => number_format($booking->loyalty_discount ?? 0, 0, ',', '.'),
+            'priceSuffix' => (int) ($booking->price_suffix ?? 0),
+            'appUrl'      => rtrim(config('app.url'), '/'),
+            'frontendUrl' => rtrim(config('app.frontend_url'), '/'),
+        ];
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.booking-voucher', $payload)
+            ->setPaper('a4', 'portrait');
+
+        return $pdf->download("E-Voucher-{$booking->booking_code}.pdf");
+    }
+
     public function refund(Request $request, string $id)
     {
-        $booking = Booking::findOrFail($id);
+        $booking = Booking::with('hotel:id,name,owner_id')->findOrFail($id);
         $booking->update(['status' => 'refunded']);
         ActivityLogService::log($request->user()->id, 'REFUND_BOOKING', 'booking', $id, $request);
+
+        // Notif: customer dapat info refund disetujui & ditransfer
+        NotificationService::send(
+            $booking->user_id,
+            'booking_refunded',
+            'Refund Anda telah diproses',
+            "Dana booking #{$booking->booking_code} sebesar Rp " . number_format($booking->total_price, 0, ',', '.') . " telah dikembalikan.",
+            [
+                'booking_id'   => $booking->id,
+                'booking_code' => $booking->booking_code,
+                'amount'       => (float) $booking->total_price,
+            ]
+        );
 
         return response()->json(['success' => true, 'message' => 'Refund diproses.', 'data' => $booking]);
     }

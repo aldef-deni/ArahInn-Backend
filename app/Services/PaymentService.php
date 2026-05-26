@@ -56,11 +56,18 @@ class LoyaltyService
 // =====================================================
 class PaymentService
 {
-    public function __construct(private DokuService $doku) {}
+    public function __construct(
+        private DokuService $doku,
+        private DokuMerchantPicker $merchantPicker,
+    ) {}
 
     /**
      * Generate DOKU virtual account for the booking.
      * $paymentMethod = bank slug: 'bca' | 'mandiri' | 'bni' | 'bri' | 'permata'
+     *
+     * Merchant DOKU dipilih otomatis oleh DokuMerchantPicker.
+     * Sekali dipilih, merchant disimpan di kolom payments.merchant_key
+     * supaya webhook bisa diverifikasi dengan kunci yang sama.
      */
     public function initiate(Booking $booking, string $paymentMethod): array
     {
@@ -68,7 +75,7 @@ class PaymentService
             throw new \InvalidArgumentException('Booking tidak dalam status pending.');
         }
 
-        // Return existing active VA instead of calling DOKU again (prevents "Inconsistent Request")
+        // Cek pending VA aktif untuk booking ini
         $existing = Payment::where('booking_id', $booking->id)
             ->where('status', 'pending')
             ->where('gateway', 'doku')
@@ -77,14 +84,33 @@ class PaymentService
             ->first();
 
         if ($existing) {
-            $vaNumber = trim($existing->payload['_va_number'] ?? '');
-            return [
-                'payment'    => $existing,
-                'va_number'  => $vaNumber,
-                'bank'       => strtoupper($existing->method),
-                'expired_at' => $existing->expired_at->toIso8601String(),
-            ];
+            // Kalau method SAMA → reuse VA (prevent "Inconsistent Request" dari DOKU
+            // saat user re-tap tombol "Bayar via VA X" pada bank yang sama)
+            if ($existing->method === $paymentMethod) {
+                $vaNumber = trim($existing->payload['_va_number'] ?? '');
+                return [
+                    'payment'      => $existing,
+                    'va_number'    => $vaNumber,
+                    'bank'         => strtoupper($existing->method),
+                    'merchant_key' => $existing->merchant_key,
+                    'expired_at'   => $existing->expired_at->toIso8601String(),
+                ];
+            }
+
+            // Method BEDA → user pindah bank (mis. BCA → Mandiri).
+            // Cancel pending VA lama supaya tidak ada 2 VA aktif untuk 1 booking,
+            // lalu lanjut create VA baru untuk method yang diminta.
+            $existing->update(['status' => 'canceled']);
+            logger()->info('Payment: existing pending VA canceled (method changed)', [
+                'booking_code' => $booking->booking_code,
+                'old_method'   => $existing->method,
+                'new_method'   => $paymentMethod,
+            ]);
         }
+
+        // Pilih merchant secara round-robin
+        $merchantKey = $this->merchantPicker->pick();
+        $this->doku->useMerchant($merchantKey);
 
         $expiresAt = now()->addHour();
 
@@ -113,38 +139,64 @@ class PaymentService
             'amount'         => $booking->total_price,
             'method'         => $paymentMethod,
             'gateway'        => 'doku',
+            'merchant_key'   => $merchantKey,
             'gateway_trx_id' => $result['trxId'] ?? $booking->booking_code,
             'status'         => 'pending',
             'expired_at'     => $expiresAt,
             'payload'        => $result,
         ]);
 
+        // Notif: VA sudah dibuat, customer perlu bayar sebelum expired
+        NotificationService::send(
+            $booking->user_id,
+            'payment_pending',
+            'Selesaikan pembayaran ' . strtoupper($paymentMethod),
+            'Nomor VA: ' . ($vaNumber ?: '-') . ' · Bayar sebelum ' . $expiresAt->format('H:i, d M Y'),
+            [
+                'booking_id'   => $booking->id,
+                'booking_code' => $booking->booking_code,
+                'payment_id'   => $payment->id,
+                'bank'         => strtoupper($paymentMethod),
+                'va_number'    => $vaNumber,
+                'expired_at'   => $expiresAt->toIso8601String(),
+            ]
+        );
+
         return [
-            'payment'    => $payment,
-            'va_number'  => $vaNumber,
-            'bank'       => strtoupper($paymentMethod),
-            'expired_at' => $expiresAt->toIso8601String(),
+            'payment'      => $payment,
+            'va_number'    => $vaNumber,
+            'bank'         => strtoupper($paymentMethod),
+            'merchant_key' => $merchantKey,
+            'expired_at'   => $expiresAt->toIso8601String(),
         ];
     }
 
     /**
      * Handle DOKU SNAP webhook notification.
-     * Pass the raw request body string and all request headers.
+     * Identifikasi merchant dari payment yang sebelumnya dibuat,
+     * lalu verify signature pakai kunci merchant tersebut.
      */
     public function handleWebhook(string $rawBody, array $headers, string $webhookPath): void
     {
-        if (!$this->doku->verifyWebhook($headers, $rawBody, $webhookPath)) {
-            throw new \RuntimeException('Invalid DOKU webhook signature.');
-        }
-
-        $payload = json_decode($rawBody, true);
-
-        // SNAP payment notification — trxId is our booking_code
+        $payload     = json_decode($rawBody, true) ?? [];
         $bookingCode = $payload['trxId'] ?? null;
         if (!$bookingCode) return;
 
         $booking = Booking::where('booking_code', $bookingCode)->first();
         if (!$booking) return;
+
+        // Cari merchant_key dari payment terkait booking ini
+        $payment = Payment::where('booking_id', $booking->id)
+            ->where('gateway', 'doku')
+            ->latest()
+            ->first();
+
+        $merchantKey = $payment?->merchant_key ?? 'default';
+        $this->doku->useMerchant($merchantKey);
+
+        if (!$this->doku->verifyWebhook($headers, $rawBody, $webhookPath)) {
+            throw new \RuntimeException('Invalid DOKU webhook signature (merchant: ' . $merchantKey . ').');
+        }
 
         // SNAP success: paidAmount present and equals totalAmount
         $paidAmount  = (float) ($payload['paidAmount']['value']  ?? 0);

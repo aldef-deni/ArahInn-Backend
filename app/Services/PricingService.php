@@ -3,19 +3,42 @@
 namespace App\Services;
 
 use App\Models\Room;
+use App\Models\RoomPrice;
 use App\Models\Booking;
 use App\Models\Promo;
+use App\Models\RatePlan;
 use Carbon\Carbon;
 
 class PricingService
 {
-    private float $markupPercent;
+    // PPh (Pajak Penghasilan) yang selalu ditambahkan di atas komisi properti.
+    private const PPH_PERCENT = 2.0;
+
+    // Fallback markup kalau hotel belum punya commission_percent
+    // (= komisi default 10% + PPh 2% = 12%). Diambil dari config supaya
+    // bisa di-override via env tanpa edit kode.
+    private float $defaultMarkupPercent;
     private float $taxPercent;
 
     public function __construct()
     {
-        $this->markupPercent = (float) config('ota.markup_percent', 12) / 100;
-        $this->taxPercent    = (float) config('ota.tax_percent', 11) / 100;
+        $this->defaultMarkupPercent = (float) config('ota.markup_percent', 12) / 100;
+        $this->taxPercent           = (float) config('ota.tax_percent', 11) / 100;
+    }
+
+    /**
+     * Hitung total markup ("Pajak & Others") untuk sebuah hotel.
+     *   commission_percent (komisi properti) + 2% PPh
+     * Kalau commission_percent NULL → fallback ke default config (12%).
+     */
+    private function resolveMarkup(?Room $room): float
+    {
+        $hotel = $room?->hotel;
+        if (!$hotel || $hotel->commission_percent === null) {
+            return $this->defaultMarkupPercent;
+        }
+        $commission = (float) $hotel->commission_percent;
+        return ($commission + self::PPH_PERCENT) / 100;
     }
 
     /**
@@ -33,7 +56,7 @@ class PricingService
             'room_count' => $roomCount,
         ] = array_merge(['promo_code' => null, 'user_id' => null, 'use_points' => false, 'room_count' => 1], $params);
 
-        $room      = Room::with('hotel:id,owner_id')->findOrFail($roomId);
+        $room      = Room::with('hotel:id,owner_id,commission_percent')->findOrFail($roomId);
         $roomCount = max(1, (int) $roomCount);
         $ciDate    = Carbon::parse($checkIn);
         $coDate    = Carbon::parse($checkOut);
@@ -43,22 +66,48 @@ class PricingService
             throw new \InvalidArgumentException('Tanggal checkout harus setelah check-in.');
         }
 
-        // 1. Base price dengan weekend premium × jumlah kamar
-        $basePrice = $this->calculateBasePrice($room->base_price, $ciDate, $coDate) * $roomCount;
+        // 1. Base price = sum harga per tanggal × jumlah kamar.
+        //    Owner bisa override harga per tanggal lewat "Atur Harga & Ketersediaan"
+        //    (kolom room_prices.price). Kalau tidak di-set, pakai room.base_price.
+        //    TIDAK ADA weekend premium otomatis — owner bisa set harga weekend sendiri.
+        $basePrice = $this->calculateBasePrice($room, $ciDate, $coDate) * $roomCount;
 
-        // 2. Occupancy-based markup
-        $occupancyRate = $this->getOccupancyRate($roomId, $checkIn, $checkOut, $room->total_units);
-        if ($occupancyRate > 0.8)       $basePrice *= 1.10;
-        elseif ($occupancyRate > 0.5)   $basePrice *= 1.05;
+        // 1b. Rate plan: pilih plan yang berlaku → apply multiplier × (1 − discount%)
+        $ratePlan         = RatePlan::pickApplicable($room->hotel_id, $room->id, $nights, $checkIn, $checkOut);
+        $ratePlanModifier = $ratePlan ? $ratePlan->priceModifier() : 1.0;
+        if ($ratePlanModifier !== 1.0) {
+            $basePrice = round($basePrice * $ratePlanModifier, 2);
+        }
 
-        // 3. Platform markup
-        $markupAmount = round($basePrice * $this->markupPercent, 2);
-        $subtotal     = $basePrice + $markupAmount;
+        // Simpan harga sebelum promo untuk display "Rp X coret → Rp Y"
+        $originalBasePrice = $basePrice;
 
-        // 4. Promo discount
+        // 2. Promo discount — diterapkan ke BASE PRICE dulu (sebelum markup)
+        //    agar konsisten dengan harga "discounted" di card kamar (yang juga
+        //    dihitung dari base price, bukan subtotal).
         $hotelOwnerId = $room->hotel->owner_id ?? null;
-        [$promoDiscount, $promo] = $this->applyPromo($promoCode, $subtotal, $hotelOwnerId);
-        $subtotal -= $promoDiscount;
+        [$promoDiscount, $promo] = $this->applyPromo($promoCode, $basePrice, $hotelOwnerId);
+
+        // 2b. Auto-apply promo platform yang di-follow owner kalau user tidak
+        //     masukkan kode manual.
+        if (!$promo && $hotelOwnerId) {
+            $best = \App\Models\Promo::bestForOwner($hotelOwnerId, $basePrice);
+            if ($best) {
+                $promoDiscount = $best['discount'];
+                $promo         = $best['promo'];
+            }
+        }
+        $basePrice = round(max(0, $basePrice - $promoDiscount), 2);
+
+        // 3. Markup "Pajak & Others" = komisi properti + 2% PPh
+        //    Dihitung dari base price POST-promo, jadi customer dapat manfaat
+        //    diskon di markup juga.
+        $markupPercent = $this->resolveMarkup($room);
+        $markupAmount  = round($basePrice * $markupPercent, 2);
+        $subtotal      = $basePrice + $markupAmount;
+
+        // Kept for compatibility (occupancy_rate masih dilaporkan di breakdown)
+        $occupancyRate = $this->getOccupancyRate($roomId, $checkIn, $checkOut, $room->total_units);
 
         // 5. Loyalty points (max 10% dari subtotal)
         $loyaltyDiscount = 0;
@@ -77,33 +126,65 @@ class PricingService
         $totalPrice  = (int) ceil($subtotal + $taxAmount) + $priceSuffix;
 
         return [
-            'nights'           => $nights,
-            'base_price'       => round($basePrice, 2),
-            'markup_amount'    => round($markupAmount, 2),
-            'promo_discount'   => round($promoDiscount, 2),
+            'nights'                => $nights,
+            'original_base_price'   => round($originalBasePrice, 2),  // sebelum diskon promo
+            'base_price'            => round($basePrice, 2),           // setelah diskon promo
+            'markup_amount'         => round($markupAmount, 2),
+            'promo_discount'        => round($promoDiscount, 2),
             'loyalty_discount' => round($loyaltyDiscount, 2),
             'tax_amount'       => round($taxAmount, 2),
             'price_suffix'     => $priceSuffix,
             'total_price'      => $totalPrice,
             'promo'            => $promo,
+            'rate_plan'        => $ratePlan ? [
+                'id'                 => $ratePlan->id,
+                'name'                => $ratePlan->name,
+                'type'                => $ratePlan->type,
+                'is_default'          => (bool) $ratePlan->is_default,
+                'multiplier'          => (float) $ratePlan->multiplier,
+                'discount_percent'    => (float) ($ratePlan->discount_percent ?? 0),
+                'breakfast'           => (bool) $ratePlan->breakfast,
+                'cancelable'          => (bool) $ratePlan->cancelable,
+                'cancellation_type'   => $ratePlan->cancellation_type,
+            ] : null,
             'breakdown'        => [
-                'occupancy_rate' => round($occupancyRate * 100),
+                'occupancy_rate'      => round($occupancyRate * 100),
+                'rate_plan_modifier'  => $ratePlanModifier,
             ],
         ];
     }
 
     /**
-     * Harga dasar dengan weekend premium (+15%)
+     * Harga dasar = sum harga per tanggal dalam rentang stay.
+     * Prioritas tiap malam:
+     *   1. room_prices.price (kalau owner set harga khusus tanggal itu)
+     *   2. room.base_price (default)
+     *
+     * TIDAK ADA weekend premium otomatis lagi. Kalau owner mau Saturday lebih
+     * mahal, owner set lewat menu "Atur Harga & Ketersediaan".
      */
-    private function calculateBasePrice(float $basePerNight, Carbon $checkIn, Carbon $checkOut): float
+    private function calculateBasePrice(Room $room, Carbon $checkIn, Carbon $checkOut): float
     {
-        $total = 0;
-        $current = $checkIn->copy();
+        $defaultPrice = (float) $room->base_price;
 
-        while ($current->lt($checkOut)) {
-            $isWeekend = $current->isWeekend();
-            $total += $isWeekend ? $basePerNight * 1.15 : $basePerNight;
-            $current->addDay();
+        // Ambil semua override harga per tanggal di rentang stay
+        $stayDates = [];
+        $cursor = $checkIn->copy();
+        while ($cursor->lt($checkOut)) {
+            $stayDates[] = $cursor->format('Y-m-d');
+            $cursor->addDay();
+        }
+
+        $overrides = RoomPrice::where('room_id', $room->id)
+            ->whereIn('date', $stayDates)
+            ->whereNotNull('price')
+            ->get()
+            ->keyBy(fn($p) => $p->date->format('Y-m-d'));
+
+        $total = 0;
+        foreach ($stayDates as $d) {
+            $row = $overrides->get($d);
+            $total += $row ? (float) $row->price : $defaultPrice;
         }
 
         return round($total, 2);

@@ -17,6 +17,9 @@ class NotificationService
                 'body'    => $body,
                 'data'    => $data,
             ]);
+
+            // Push notification (silent fail jika gagal — tidak boleh memblok flow)
+            ExpoPushService::sendToUser($userId, $title, $body, array_merge($data, ['type' => $type]));
         } catch (\Exception $e) {
             logger()->error('NotificationService::send failed: ' . $e->getMessage());
         }

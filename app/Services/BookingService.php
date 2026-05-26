@@ -69,6 +69,14 @@ class BookingService
 
     public function create(array $data, int $userId): array
     {
+        // 0. Cek allotment per tanggal (available_units) sebelum hitung harga
+        $this->assertAllotment(
+            (int) $data['room_id'],
+            $data['check_in'],
+            $data['check_out'],
+            (int) ($data['room_count'] ?? 1)
+        );
+
         // 1. Hitung harga
         $priceData = $this->pricing->calculate([
             'room_id'    => $data['room_id'],
@@ -92,6 +100,7 @@ class BookingService
                     'user_id'          => $userId,
                     'hotel_id'         => $data['hotel_id'],
                     'room_id'          => $data['room_id'],
+                    'rate_plan_id'     => $priceData['rate_plan']['id'] ?? null,
                     'check_in'         => $data['check_in'],
                     'check_out'        => $data['check_out'],
                     'total_nights'     => $priceData['nights'],
@@ -149,8 +158,88 @@ class BookingService
         }
     }
 
+    /**
+     * Cek allotment per tanggal: pastikan jumlah kamar yang sudah ter-book
+     * + room_count yang diminta tidak melebihi available_units (atau total_units
+     * sebagai fallback) untuk setiap tanggal stay.
+     */
+    private function assertAllotment(int $roomId, string $checkIn, string $checkOut, int $roomCount = 1): void
+    {
+        $room = Room::find($roomId);
+        if (!$room) {
+            throw new \InvalidArgumentException('Kamar tidak ditemukan.');
+        }
+
+        $totalUnits = (int) $room->total_units;
+        if ($roomCount < 1) $roomCount = 1;
+
+        $cursor = \Carbon\Carbon::parse($checkIn);
+        $end    = \Carbon\Carbon::parse($checkOut);
+
+        while ($cursor->lt($end)) {
+            $dateStr = $cursor->format('Y-m-d');
+
+            $price = \App\Models\RoomPrice::where('room_id', $roomId)
+                ->whereDate('date', $dateStr)
+                ->first();
+
+            $allotment = ($price && $price->available_units !== null)
+                ? (int) $price->available_units
+                : $totalUnits;
+
+            // Eksplisit ditutup
+            if ($price && $price->is_available === false) {
+                throw new \InvalidArgumentException(
+                    "Kamar tidak tersedia untuk tanggal {$dateStr}."
+                );
+            }
+
+            if ($allotment <= 0) {
+                throw new \InvalidArgumentException(
+                    "Kamar sudah habis dipesan untuk tanggal {$dateStr}."
+                );
+            }
+
+            // Hitung booking aktif yang menempati tanggal ini.
+            // Pending yang sudah expired (lewat expires_at) tidak dihitung
+            // supaya tidak nge-block customer baru.
+            $booked = Booking::where('room_id', $roomId)
+                ->where(function ($q) {
+                    $q->whereIn('status', ['paid', 'issued'])
+                      ->orWhere(function ($qq) {
+                          $qq->where('status', 'pending')
+                             ->where(function ($qqq) {
+                                 $qqq->whereNull('expires_at')
+                                     ->orWhere('expires_at', '>', now());
+                             });
+                      });
+                })
+                ->where('check_in',  '<=', $dateStr)
+                ->where('check_out', '>',  $dateStr)
+                ->sum('room_count');
+
+            if (($booked + $roomCount) > $allotment) {
+                $sisa = max(0, $allotment - (int) $booked);
+                throw new \InvalidArgumentException(
+                    "Sisa kamar pada {$dateStr} hanya {$sisa}. Permintaan {$roomCount} kamar melebihi kapasitas."
+                );
+            }
+
+            $cursor->addDay();
+        }
+    }
+
     public function issue(Booking $booking): Booking
     {
+        // Idempotent — kalau sudah issued, skip semua. Resend voucher via
+        // endpoint resendVoucher (atau Console::resend-voucher) tetap bisa.
+        if ($booking->status === 'issued' && $booking->issued_at) {
+            logger()->info('BookingIssued: skipped (already issued)', [
+                'booking_code' => $booking->booking_code,
+            ]);
+            return $booking;
+        }
+
         $booking->update(['status' => 'issued', 'issued_at' => now()]);
         $this->lock->unlock($booking->room_id);
 
@@ -160,7 +249,76 @@ class BookingService
             $this->loyalty->earn($booking->user_id, $points, $booking->id);
         }
 
-        Mail::to($booking->guest_email)->send(new \App\Mail\BookingIssuedMail($booking));
+        // Refresh model + relations untuk pastikan data lengkap saat render PDF
+        $booking = $booking->fresh(['hotel', 'room']) ?? $booking;
+
+        // Kirim e-voucher ke tamu (wrap try-catch agar gagal mail tidak hentikan flow)
+        try {
+            if (!$booking->guest_email) {
+                logger()->warning('BookingIssued: guest_email kosong, skip kirim ke tamu', [
+                    'booking_code' => $booking->booking_code,
+                ]);
+            } else {
+                Mail::to($booking->guest_email)->send(new \App\Mail\BookingIssuedMail($booking));
+                logger()->info('BookingIssued: voucher sent to guest', [
+                    'booking_code' => $booking->booking_code,
+                    'guest_email'  => $booking->guest_email,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            logger()->error('BookingIssued: failed to send voucher to guest', [
+                'booking_code' => $booking->booking_code,
+                'guest_email'  => $booking->guest_email,
+                'error'        => $e->getMessage(),
+                'trace_first'  => explode("\n", $e->getTraceAsString())[0] ?? null,
+            ]);
+        }
+
+        // Kirim copy e-voucher ke owner properti
+        try {
+            $ownerId    = $booking->hotel?->owner_id;
+            $ownerEmail = $ownerId ? \App\Models\User::find($ownerId)?->email : null;
+
+            logger()->info('BookingIssued: sending to owner', [
+                'booking_code' => $booking->booking_code,
+                'hotel_id'     => $booking->hotel?->id,
+                'owner_id'     => $ownerId,
+                'owner_email'  => $ownerEmail,
+            ]);
+
+            if ($ownerEmail) {
+                Mail::to($ownerEmail)->send(new \App\Mail\BookingIssuedMail($booking));
+            } else {
+                logger()->warning('BookingIssued: owner email missing', [
+                    'booking_code' => $booking->booking_code,
+                    'hotel_id'     => $booking->hotel?->id,
+                    'owner_id'     => $ownerId,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            logger()->error('BookingIssued: failed to send to owner', [
+                'booking_code' => $booking->booking_code,
+                'error'        => $e->getMessage(),
+            ]);
+        }
+
+        // Kirim juga ke email tambahan yang didaftarkan owner di Step 3 form daftar hotel
+        $extraEmails = is_array($booking->hotel?->voucher_emails) ? $booking->hotel->voucher_emails : [];
+        foreach ($extraEmails as $extraEmail) {
+            try {
+                Mail::to($extraEmail)->send(new \App\Mail\BookingIssuedMail($booking));
+                logger()->info('BookingIssued: voucher sent to extra email', [
+                    'booking_code' => $booking->booking_code,
+                    'extra_email'  => $extraEmail,
+                ]);
+            } catch (\Throwable $e) {
+                logger()->error('BookingIssued: failed to send to extra email', [
+                    'booking_code' => $booking->booking_code,
+                    'extra_email'  => $extraEmail,
+                    'error'        => $e->getMessage(),
+                ]);
+            }
+        }
 
         // Notify guest: payment confirmed
         NotificationService::send(

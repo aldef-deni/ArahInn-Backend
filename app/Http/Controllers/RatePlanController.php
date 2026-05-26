@@ -13,11 +13,14 @@ class RatePlanController extends Controller
         $hotel = Hotel::findOrFail($hotelId);
         $user  = auth()->user();
 
-        if ($user->role !== 'superadmin' && $user->role !== 'admin') {
-            abort_if($hotel->owner_id !== $user->id, 403, 'Akses ditolak.');
+        if ($user->hasRole(['superadmin', 'admin'])) {
+            return $hotel;
+        }
+        if ($user->hasRole(['owner', 'admin_property']) && (int) $hotel->owner_id === (int) $user->id) {
+            return $hotel;
         }
 
-        return $hotel;
+        abort(403, 'Akses ditolak.');
     }
 
     public function index(int $hotelId)
@@ -72,8 +75,9 @@ class RatePlanController extends Controller
             'target_settings'       => 'nullable|array',
             'room_ids'              => 'nullable|array',
             'room_ids.*'            => 'integer',
-            'multiplier'            => 'numeric|min:1|max:10',
+            'multiplier'            => 'numeric|min:0.1|max:10',
             'active'                => 'boolean',
+            'is_default'            => 'boolean',
         ]);
 
         // derive breakfast from meal_options for backward compat
@@ -84,6 +88,17 @@ class RatePlanController extends Controller
         // cancelable = true when cancellation_type is custom
         if (isset($data['cancellation_type'])) {
             $data['cancelable'] = $data['cancellation_type'] === 'custom';
+        }
+
+        // Auto-default kalau ini rate plan pertama untuk hotel ini
+        $hasAnyPlan = RatePlan::where('hotel_id', $hotelId)->exists();
+        if (!$hasAnyPlan) {
+            $data['is_default'] = true;
+        }
+
+        // Pastikan hanya 1 default per hotel
+        if (!empty($data['is_default'])) {
+            RatePlan::where('hotel_id', $hotelId)->update(['is_default' => false]);
         }
 
         $plan = RatePlan::create(['hotel_id' => $hotelId] + $data);
@@ -122,8 +137,9 @@ class RatePlanController extends Controller
             'target_settings'       => 'nullable|array',
             'room_ids'              => 'nullable|array',
             'room_ids.*'            => 'integer',
-            'multiplier'            => 'sometimes|numeric|min:1|max:10',
+            'multiplier'            => 'sometimes|numeric|min:0.1|max:10',
             'active'                => 'sometimes|boolean',
+            'is_default'            => 'sometimes|boolean',
         ]);
 
         if (isset($data['meal_options'])) {
@@ -134,9 +150,29 @@ class RatePlanController extends Controller
             $data['cancelable'] = $data['cancellation_type'] === 'custom';
         }
 
+        // Jika set sebagai default, unset default lain di hotel ini
+        if (array_key_exists('is_default', $data) && $data['is_default']) {
+            RatePlan::where('hotel_id', $hotelId)
+                ->where('id', '!=', $plan->id)
+                ->update(['is_default' => false]);
+        }
+
         $plan->update($data);
 
-        return response()->json(['data' => $plan]);
+        // Jangan biarkan hotel tanpa default — kalau plan ini diturunkan dari default
+        // dan tidak ada default lain, set default ke plan tertua yang aktif.
+        if (array_key_exists('is_default', $data) && !$data['is_default'] && $plan->wasChanged('is_default')) {
+            $hasDefault = RatePlan::where('hotel_id', $hotelId)->where('is_default', true)->exists();
+            if (!$hasDefault) {
+                $fallback = RatePlan::where('hotel_id', $hotelId)
+                    ->where('active', true)
+                    ->orderBy('created_at')
+                    ->first();
+                if ($fallback) $fallback->update(['is_default' => true]);
+            }
+        }
+
+        return response()->json(['data' => $plan->fresh()]);
     }
 
     public function destroy(int $hotelId, int $planId)
@@ -144,7 +180,17 @@ class RatePlanController extends Controller
         $this->authorizeHotel($hotelId);
 
         $plan = RatePlan::where('hotel_id', $hotelId)->findOrFail($planId);
+        $wasDefault = (bool) $plan->is_default;
         $plan->delete();
+
+        // Promosikan plan tertua jadi default kalau yang dihapus adalah default
+        if ($wasDefault) {
+            $fallback = RatePlan::where('hotel_id', $hotelId)
+                ->where('active', true)
+                ->orderBy('created_at')
+                ->first();
+            if ($fallback) $fallback->update(['is_default' => true]);
+        }
 
         return response()->json(['message' => 'Rate plan dihapus.']);
     }

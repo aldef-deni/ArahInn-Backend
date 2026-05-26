@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Booking;
 use App\Models\Hotel;
-use App\Models\Payment;
 use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -32,14 +31,19 @@ class OwnerDashboardController extends Controller
 
         $thisMonth = now()->startOfMonth();
 
-        $totalRevenue     = Payment::where('status', 'settlement')
-            ->whereHas('booking', fn($q) => $q->whereIn('hotel_id', $ids))
-            ->sum('amount');
+        // Revenue dihitung dari booking yang sudah pasti dibayar (paid/issued),
+        // bukan dari table payments — supaya juga cover booking yang dikonfirmasi
+        // manual / tidak melalui gateway.
+        $paidStatuses = ['paid', 'issued'];
 
-        $revenueThisMonth = Payment::where('status', 'settlement')
+        $totalRevenue     = Booking::whereIn('hotel_id', $ids)
+            ->whereIn('status', $paidStatuses)
+            ->sum('total_price');
+
+        $revenueThisMonth = Booking::whereIn('hotel_id', $ids)
+            ->whereIn('status', $paidStatuses)
             ->where('created_at', '>=', $thisMonth)
-            ->whereHas('booking', fn($q) => $q->whereIn('hotel_id', $ids))
-            ->sum('amount');
+            ->sum('total_price');
 
         $totalBookings     = Booking::whereIn('hotel_id', $ids)->count();
         $bookingsThisMonth = Booking::whereIn('hotel_id', $ids)->where('created_at', '>=', $thisMonth)->count();
@@ -57,12 +61,12 @@ class OwnerDashboardController extends Controller
             ->groupBy('status')
             ->pluck('count', 'status');
 
-        $dailyRevenue = Payment::where('status', 'settlement')
+        $dailyRevenue = Booking::whereIn('hotel_id', $ids)
+            ->whereIn('status', $paidStatuses)
             ->where('created_at', '>=', $thisMonth)
-            ->whereHas('booking', fn($q) => $q->whereIn('hotel_id', $ids))
             ->get()
-            ->groupBy(fn($p) => $p->created_at->format('Y-m-d'))
-            ->map(fn($g, $d) => ['date' => $d, 'amount' => (float) $g->sum('amount')])
+            ->groupBy(fn($b) => $b->created_at->format('Y-m-d'))
+            ->map(fn($g, $d) => ['date' => $d, 'amount' => (float) $g->sum('total_price')])
             ->values();
 
         return response()->json([

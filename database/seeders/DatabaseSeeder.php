@@ -206,5 +206,11 @@ class DatabaseSeeder extends Seeder
         $this->command->info('⚪ user@otasystem.id        — End User');
         $this->command->info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         $this->command->info('🎟️  Promo: ARAHINN50, WEEKEND20, Flash Sale');
+
+        // ── PPOB Categories ──────────────────────────────────
+        $this->call([
+            PpobCategorySeeder::class,
+        ]);
+        $this->command->info('🧾 PPOB Categories seeded');
     }
 }

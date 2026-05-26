@@ -7,7 +7,7 @@ class Booking extends Model
 {
     use HasFactory;
     protected $fillable = [
-        'booking_code','user_id','hotel_id','room_id',
+        'booking_code','user_id','hotel_id','room_id','rate_plan_id',
         'check_in','check_out','total_nights','guests','room_count',
         'base_price','markup_amount','promo_discount','loyalty_discount',
         'tax_amount','total_price','price_suffix',
@@ -32,6 +32,7 @@ class Booking extends Model
     public function user()     { return $this->belongsTo(User::class); }
     public function hotel()    { return $this->belongsTo(Hotel::class); }
     public function room()     { return $this->belongsTo(Room::class); }
+    public function ratePlan() { return $this->belongsTo(RatePlan::class); }
     public function promo()    { return $this->belongsTo(Promo::class); }
     public function payments() { return $this->hasMany(Payment::class); }
     public function loyaltyPoints() { return $this->hasMany(LoyaltyPoint::class); }
@@ -47,5 +48,31 @@ class Booking extends Model
         $code  = 'ARH';
         for ($i = 0; $i < 7; $i++) $code .= $chars[random_int(0, strlen($chars) - 1)];
         return $code;
+    }
+
+    /**
+     * Auto-trigger BookingService::issue() saat status berubah jadi 'paid'.
+     *
+     * Defensive: kalau payment confirmed via path apa pun (DOKU webhook,
+     * admin manual update, console command, dll), voucher email tetap terkirim.
+     * Tidak masalah kalau ter-trigger berbarengan dengan call manual karena
+     * issue() sekarang idempotent (skip kalau sudah issued).
+     */
+    protected static function booted(): void
+    {
+        static::updated(function (Booking $booking) {
+            if (!$booking->wasChanged('status')) return;
+            if ($booking->status !== 'paid') return;
+
+            try {
+                app(\App\Services\BookingService::class)->issue($booking);
+            } catch (\Throwable $e) {
+                logger()->error('Booking::booted auto-issue failed', [
+                    'booking_id'   => $booking->id,
+                    'booking_code' => $booking->booking_code,
+                    'error'        => $e->getMessage(),
+                ]);
+            }
+        });
     }
 }

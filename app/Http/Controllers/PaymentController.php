@@ -15,7 +15,7 @@ class PaymentController extends Controller
     {
         $data = $request->validate([
             'booking_id'     => 'required|integer|exists:bookings,id',
-            'payment_method' => 'required|string|in:bca,mandiri,bni,bri,permata',
+            'payment_method' => 'required|string|in:bca,mandiri,bri,bsi',
         ]);
 
         try {

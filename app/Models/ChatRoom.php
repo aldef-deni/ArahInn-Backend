@@ -6,10 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class ChatRoom extends Model
 {
-    protected $fillable = ['booking_id', 'user_id', 'hotel_id', 'is_closed'];
+    protected $fillable = ['booking_id', 'user_id', 'hotel_id', 'type', 'is_closed'];
 
     protected $casts = [
-        'is_closed' => 'boolean',
+        'is_closed'    => 'boolean',
+        'unread_count' => 'integer', // dari withCount() agar selalu int (bukan string)
     ];
 
     public function booking()

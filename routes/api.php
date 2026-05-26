@@ -20,6 +20,7 @@ use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\CampaignController;
 use App\Http\Controllers\Admin\MarketManagerController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\DeviceTokenController;
 use App\Http\Controllers\PropertyListingController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\RatePlanController;
@@ -29,6 +30,7 @@ use App\Http\Controllers\HotelSettingsController;
 use App\Http\Controllers\OwnerDashboardController;
 use App\Http\Controllers\InteriorInquiryController;
 use App\Http\Controllers\InteriorDesignController;
+use App\Http\Controllers\PpobController;
 
 /*
 |--------------------------------------------------------------------------
@@ -48,6 +50,7 @@ Route::get('/health', fn() => response()->json([
 // ── Auth (Public) ─────────────────────────────────────
 Route::prefix('auth')->group(function () {
     Route::post('/register',       [AuthController::class, 'register']);
+    Route::post('/register-owner', [AuthController::class, 'registerOwner']);
     Route::post('/login',          [AuthController::class, 'login']);
     Route::post('/refresh-token',  [AuthController::class, 'refresh']);
     Route::post('/forgot-password',[AuthController::class, 'forgotPassword']);
@@ -56,6 +59,8 @@ Route::prefix('auth')->group(function () {
     // OAuth Google
     Route::get('/google',          [SocialAuthController::class, 'redirectGoogle']);
     Route::get('/google/callback', [SocialAuthController::class, 'callbackGoogle']);
+    // Mobile native Google Sign-In — verify ID token, return auth token
+    Route::post('/google/mobile',  [SocialAuthController::class, 'mobileGoogle']);
 
     // OAuth Facebook
     Route::get('/facebook',          [SocialAuthController::class, 'redirectFacebook']);
@@ -83,6 +88,7 @@ Route::prefix('hotels')->group(function () {
 Route::prefix('promos')->group(function () {
     Route::get('/active',      [PromoController::class, 'active']);
     Route::get('/flash-sales', [PromoController::class, 'flashSales']);
+    Route::get('/flyers',      [PromoController::class, 'flyers']);
 });
 
 // ── Property Listings (Owner - must be before public /{id} wildcard) ────
@@ -94,7 +100,8 @@ Route::prefix('properties')->group(function () {
     Route::get('/',           [PropertyListingController::class, 'index']);
     Route::get('/pending',    [PropertyListingController::class, 'pending'])
         ->middleware(['auth:sanctum', 'role:superadmin|admin']);
-    Route::get('/{id}',       [PropertyListingController::class, 'show']);
+    Route::get('/{id}',           [PropertyListingController::class, 'show']);
+    Route::get('/{id}/reviews',   [ReviewController::class, 'byProperty']);
     Route::post('/{id}/approve', [PropertyListingController::class, 'approve'])
         ->middleware(['auth:sanctum', 'role:superadmin']);
     Route::post('/{id}/reject',  [PropertyListingController::class, 'reject'])
@@ -109,6 +116,12 @@ Route::post('/interior-inquiries', [InteriorInquiryController::class, 'store']);
 
 // ── Payment Webhooks (Public — no auth) ──────────────
 Route::post('/payments/webhook/doku', [PaymentController::class, 'webhookDoku']);
+
+// ── PPOB (Public catalog) ─────────────────────────────
+Route::prefix('ppob')->group(function () {
+    Route::get('/categories', [PpobController::class, 'categories']);
+    Route::get('/products',   [PpobController::class, 'products']);
+});
 
 // =====================================================
 // AUTHENTICATED ROUTES
@@ -154,6 +167,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // Bulk update
         Route::post('/{hotelId}/rooms/prices/bulk',     [RoomPriceController::class, 'bulk']);
 
+        // Range view (semua kamar × tanggal) untuk Softblock Allotment
+        Route::get('/{hotelId}/rooms/prices/range',     [RoomPriceController::class, 'range']);
+
         // Hotel fees (biaya tambahan)
         Route::get('/{hotelId}/fees',             [HotelFeeController::class, 'index']);
         Route::post('/{hotelId}/fees',            [HotelFeeController::class, 'store']);
@@ -173,6 +189,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}',            [BookingController::class, 'show']);
         Route::put('/{id}/cancel',     [BookingController::class, 'cancel']);
         Route::put('/{id}/reschedule', [BookingController::class, 'reschedule']);
+        Route::post('/{id}/resend-voucher', [BookingController::class, 'resendVoucher']);
+        Route::get('/{id}/voucher',         [BookingController::class, 'downloadVoucher']);
         Route::post('/{id}/refund',    [BookingController::class, 'refund'])
             ->middleware('role:superadmin|admin|finance');
         // Admin: all bookings
@@ -201,11 +219,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Owner: manage own promos + view own promo list
         Route::middleware('role:owner')->group(function () {
-            Route::get('/my',       [PromoController::class, 'myPromos']);
-            Route::get('/platform', [PromoController::class, 'platformPromos']);
-            Route::post('/',        [PromoController::class, 'store']);
-            Route::put('/{id}',     [PromoController::class, 'update']);
-            Route::delete('/{id}',  [PromoController::class, 'destroy']);
+            Route::get('/my',                 [PromoController::class, 'myPromos']);
+            Route::get('/platform',           [PromoController::class, 'platformPromos']);
+            Route::post('/{id}/follow',       [PromoController::class, 'follow']);
+            Route::delete('/{id}/follow',     [PromoController::class, 'unfollow']);
+            Route::post('/',                  [PromoController::class, 'store']);
+            Route::put('/{id}',               [PromoController::class, 'update']);
+            Route::delete('/{id}',            [PromoController::class, 'destroy']);
         });
 
         // Admin: manage all promos + owners list for dropdown
@@ -265,6 +285,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // ── Reviews ───────────────────────────────────────
     Route::post('/reviews', [ReviewController::class, 'store']);
+    Route::get('/reviews/mine', [ReviewController::class, 'myReviews']);
+    Route::get('/reviews/eligibility/hotel/{hotelId}', [ReviewController::class, 'eligibility']);
     Route::prefix('admin/reviews')->middleware('role:superadmin|admin')->group(function () {
         Route::get('/',              [ReviewController::class, 'adminIndex']);
         Route::post('/{id}/approve', [ReviewController::class, 'approve']);
@@ -279,6 +301,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/{id}/read', [NotificationController::class, 'markRead']);
     });
 
+    // ── Device tokens (push notification) ─────────────
+    Route::post('/devices/register',   [DeviceTokenController::class, 'register']);
+    Route::post('/devices/unregister', [DeviceTokenController::class, 'unregister']);
+
     // ── Chat ──────────────────────────────────────────
     Route::prefix('chat')->group(function () {
         Route::get('/rooms',           [ChatController::class, 'myRooms']);
@@ -289,6 +315,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/all-rooms', [ChatController::class, 'allRooms'])
             ->middleware('role:superadmin|admin|admin_property');
         Route::get('/owner-rooms', [ChatController::class, 'ownerRooms'])
+            ->middleware('role:owner');
+
+        // Support chat: customer ↔ Arahinn CS (no booking needed)
+        Route::get('/support/my-room',  [ChatController::class, 'mySupportRoom']);
+        Route::get('/support/rooms',    [ChatController::class, 'adminSupportRooms'])
+            ->middleware('role:superadmin|admin');
+
+        // Inquiry chat: customer ↔ Owner penginapan (pra-booking)
+        Route::post('/inquiry',           [ChatController::class, 'inquiryRoom']);
+        Route::get('/inquiry/my-rooms',   [ChatController::class, 'myInquiries']);
+        Route::get('/owner-inquiries',    [ChatController::class, 'ownerInquiries'])
             ->middleware('role:owner');
     });
 
@@ -309,6 +346,8 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('/{id}',       [HotelManageController::class, 'destroy']);
             Route::post('/{id}/approve', [HotelManageController::class, 'approve']);
             Route::post('/{id}/block',   [HotelManageController::class, 'block']);
+            Route::put('/{id}/commission', [HotelManageController::class, 'updateCommission'])
+                ->middleware('role:superadmin');
         });
         // Campaigns (CRUD admin only)
         Route::prefix('campaigns')->group(function () {
@@ -338,5 +377,22 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('interior-inquiries')->middleware('role:superadmin|admin')->group(function () {
         Route::get('/',           [InteriorInquiryController::class, 'index']);
         Route::put('/{id}/status',[InteriorInquiryController::class, 'updateStatus']);
+    });
+
+    // ── PPOB (authenticated) ─────────────────────────────────────────
+    Route::prefix('ppob')->group(function () {
+        Route::post('/inquiry',         [PpobController::class, 'inquiry']);
+        Route::post('/transactions',    [PpobController::class, 'store']);
+        Route::get('/my-transactions',  [PpobController::class, 'myTransactions']);
+        Route::get('/transactions/{trxCode}', [PpobController::class, 'show']);
+    });
+
+    Route::prefix('admin/ppob')->middleware('role:superadmin|admin|finance')->group(function () {
+        Route::get('/transactions',                 [PpobController::class, 'adminIndex']);
+        Route::post('/transactions/{trxCode}/refund', [PpobController::class, 'adminRefund'])->middleware('role:superadmin|admin|finance');
+        Route::post('/transactions/{trxCode}/retry',  [PpobController::class, 'adminRetry'])->middleware('role:superadmin|admin');
+        Route::get('/balance',                      [PpobController::class, 'adminBalance']);
+        Route::get('/categories',                   [PpobController::class, 'adminCategories']);
+        Route::put('/categories/{id}',              [PpobController::class, 'adminUpdateCategory'])->middleware('role:superadmin|admin');
     });
 });
