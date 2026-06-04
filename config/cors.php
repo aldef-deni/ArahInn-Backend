@@ -8,7 +8,8 @@ return [
     'allowed_origins' => [
         'https://staging.arahinn.com',
         'https://arahinn.com',
-        'https://extranet.arahinn.com',
+        'https://my.arahinn.com',         // Owner portal canonical (new)
+        'https://extranet.arahinn.com',   // Owner portal legacy (transition support)
         'https://kelola.arahinn.com',
         'http://localhost:5173',
     ],

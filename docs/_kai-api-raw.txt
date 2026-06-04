@@ -1,0 +1,612 @@
+
+████ Sign in ████
+[POST] https://c-dev-travel.rajabiller.com/app/sign_in
+REQUEST:
+ {
+    "outletId" : "{{uid}}",
+    "pin" : "{{pin}}"
+ }
+RESPONSE:
+{
+    "data": {
+        "balance": 939955424,
+        "nama_logo": "fastravel.bmp",
+        "cek_sum_logo": false
+    },
+    "rc": "00",
+    "rd": "SUKSES",
+    "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE3MjQxNDEyMTEsIm5iZiI6MTcyNDE0MTI3MCwiZXhwIjoxNzI0MTQ0ODEwLCJkYXRhIjoiQk1HTG0zeXdGTlJxT0lNSzZVbTNBaVErcmpXUlpCQzBmMFVoQkFib0xsWmkyNlZLMTQ0TnBEc1d0NkR0M2s5czhlZ0hPVnUrdUg5ZkdsUT0iLCJrZXkiOiJGQVNUUEFZIn0.F9pk_qSoxlSgJZF_8AZ8e-OaUex7P93memqnXdgX4Q4",
+    "mid": "5530967468",
+    "pin": "------",
+    "key": null,
+    "invoking": "Sign In App",
+    "processingTime": "0.76322293281555 Second"
+}
+
+████ Station ████
+[POST] https://c-dev-travel.rajabiller.com/train/station
+REQUEST:
+{
+    "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE3MjQxNDEyMTEsIm5iZiI6MTcyNDE0MTI3MCwiZXhwIjoxNzI0MTQ0ODEwLCJkYXRhIjoiQk1HTG0zeXdGTlJxT0lNSzZVbTNBaVErcmpXUlpCQzBmMFVoQkFib0xsWmkyNlZLMTQ0TnBEc1d0NkR0M2s5czhlZ0hPVnUrdUg5ZkdsUT0iLCJrZXkiOiJGQVNUUEFZIn0.F9pk_qSoxlSgJZF_8AZ8e-OaUex7P93memqnXdgX4Q4"
+}
+RESPONSE:
+{
+    "data": [
+        {
+            "id_stasiun": "CMI",
+            "nama_stasiun": "CIMAHI",
+            "nama_kota": "BANDUNG",
+            "is_active": 1
+        },
+        {
+            "id_stasiun": "HRP",
+            "nama_stasiun": "HAURPUGUR",
+            "nama_kota": "BANDUNG",
+            "is_active": 1
+        },
+        {
+            "id_stasiun": "PDL",
+            "nama_stasiun": "PADALARANG",
+            "nama_kota": "BANDUNG",
+            "is_active": 1
+        },
+        {
+            "id_stasiun": "KAC",
+            "nama_stasiun": "KIARACONDONG",
+            "nama_kota": "BANDUNG",
+            "is_active": 1
+        },
+        {
+            "id_stasiun": "RCK",
+            "nama_stasiun": "RANCAEKEK",
+            "nama_kota": "BANDUNG",
+            "is_active": 1
+        },
+        {
+            "id_stasiun": "CCL",
+            "nama_stasiun": "CICALENGKA",
+            "nama_kota": "BANDUNG",
+            "is_active": 1
+        },
+        {
+            "id_stasiun": "RH",
+            "nama_stasiun": "RENDEH",
+            "nama_kota": "BANDUNG",
+            "is_active": 1
+        },
+        {
+            "id_stasiun": "CD",
+            "nama_stasiun": "CIKADONGDONG",
+            "nama_kota": "BANDUNG",
+            "is_active": 1
+        },
+        {
+            "id_stasiun": "GDB",
+            "nama_stasiun": "GEDEBAGE",
+            "nama_kota": "BANDUNG",
+            "is_active": 1
+        },
+        {
+            "id_stasiun": "BD",
+            "nama_sta
+
+████ Schedule ████
+[POST] https://c-dev-travel.rajabiller.com/train/search
+REQUEST:
+{
+    "productCode" : "WKAI",
+    "origin" : "BD",
+    "destination" : "GMR",
+    "date" : "2024-08-25",
+    "token" : "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE3MjQxNDEyMTEsIm5iZiI6MTcyNDE0MTI3MCwiZXhwIjoxNzI0MTQ0ODEwLCJkYXRhIjoiQk1HTG0zeXdGTlJxT0lNSzZVbTNBaVErcmpXUlpCQzBmMFVoQkFib0xsWmkyNlZLMTQ0TnBEc1d0NkR0M2s5czhlZ0hPVnUrdUg5ZkdsUT0iLCJrZXkiOiJGQVNUUEFZIn0.F9pk_qSoxlSgJZF_8AZ8e-OaUex7P93memqnXdgX4Q4",
+    "adult":"3",
+    "infant":"1"
+}
+RESPONSE:
+{
+    "data": [
+        {
+            "trainNumber": "5530492",
+            "trainName": "KA JARAK JAUH (43)",
+            "departureDate": "2024-08-25",
+            "arrivalDate": "2024-08-25",
+            "departureTime": "06:00",
+            "arrivalTime": "08:45",
+            "duration": "2j45m",
+            "seats": [
+                {
+                    "class": "A",
+                    "availability": 300,
+                    "grade": "E",
+                    "priceAdult": "1",
+                    "priceChild": 0,
+                    "priceInfant": 0
+                }
+            ]
+        },
+        {
+            "trainNumber": "5530493",
+            "trainName": "ARGO PARAHYANGAN PANORAMIC (43PC)",
+            "departureDate": "2024-08-25",
+            "arrivalDate": "2024-08-25",
+            "departureTime": "06:00",
+            "arrivalTime": "08:45",
+            "duration": "2j45m",
+            "seats": [
+                {
+                    "class": "A",
+                    "availability": 300,
+                    "grade": "E",
+                    "priceAdult": "1",
+                    "priceChild": 0,
+                    "priceInfant": 0
+                }
+            ]
+        },
+        {
+            "trainNumber": "5530494",
+            "trainName": "ARGO PARAHYANGAN DEV (2024003)",
+            "departureDate": "2024-08-25",
+            "arrivalDate": "2024-08-25",
+            "departureTime": "07:00",
+            "arrivalTime": "10:00",
+            "duratio
+
+████ Booking ████
+[POST] https://c-dev-travel.rajabiller.com/train/book
+REQUEST:
+{
+  "productCode": "WKAI",
+  "origin": "BD",
+  "destination": "GMR",
+  "date": "2024-08-25",
+  "trainNumber": "5530492",
+  "grade": "E",
+  "class": "A",
+  "adult": 2,
+  "child": 0,
+  "infant": 1,
+  "priceAdult": 1,
+  "priceChild": "-",
+  "priceInfant": "-",
+  "trainName": "ARGO PARAHYANGAN PANORAMIC (43PC)",
+  "departureStation": "BANDUNG",
+  "departureTime": "06:00",
+  "arrivalStation": "GAMBIR",
+  "arrivalTime": "08:45",
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE3MjQwNDEwMDcsIm5iZiI6MTcyNDA0MTA2NywiZXhwIjoxNzI0MDQ0NjA3LCJkYXRhIjoiTXBXRDhtSVZzNGE4KzVRbEM0M0F4SnVEeVJta3VyY0hwQlNtT0NKZkNcL3JBd1B3d2I3UFRKZXZvelNZK21EYjhqZDJuWVFHZlo5dnJIcEE9Iiwia2V5IjoiRkFTVFBBWSJ9.0ZucOYDnlvMFHkHI95Qo8Vm4GOaroaN3Ij4gfNMD59s",
+  "passengers": {
+    "adults": [
+      {
+        "name": "Fitra Alfiananto",
+        "birthdate": "1990-04-19",
+        "phone": "085648889293",
+        "idNumber": "3524221904900003"
+      },{
+        "name": "M Rafif A",
+        "birthdate": "2018-11-25",
+        "phone": "085648889291",
+        "idNumber": "3515172511180001"
+      }
+    ],
+    "infants": [
+      {
+        "name": "M Azzam F",
+        "birthdate": "2021-06-02",
+        "idNumber": "3515170206210003"
+      }
+    ]
+  }
+}
+RESPONSE:
+{
+    "data": {
+        "bookingCode": "4ZB7U1T",
+        "transactionId": "2818213267",
+        "passengers": [
+            "Nama Anda",
+            "Nama Anda Lagi",
+            "Nama Bayi"
+        ],
+        "seats": [
+            [
+                "EKS",
+                "1",
+                "1",
+                "A"
+            ],
+            [
+                "EKS",
+                "1",
+                "1",
+                "B"
+            ],
+            [
+                "EKS",
+                "",
+                "0",
+                "-"
+            ]
+        ],
+        "komisi": 0,
+        "normalSales": "2",
+        "extraFee": "0",
+        "nominalAdmin": "7500",
+        "bookBalance": "2",
+        "discount": 0,
+        "timeLimit": "2024-08-20 16:08:33"
+    },
+    "rc": "00",
+    "rd": "Success",
+    "mid": "5530967509",
+    "invoking": "Book Train",
+    "processingTime": "6.8778760433197 Second"
+}
+
+████ Seat layout ████
+[POST] https://c-dev-travel.rajabiller.com/train/get-seat-layout
+REQUEST:
+{
+  "productCode": "WKAI",
+  "origin": "BD",
+  "destination": "GMR",
+  "date": "2024-08-25",
+  "trainNumber": "5530492",
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE3MjQxNDEyMTEsIm5iZiI6MTcyNDE0MTI3MCwiZXhwIjoxNzI0MTQ0ODEwLCJkYXRhIjoiQk1HTG0zeXdGTlJxT0lNSzZVbTNBaVErcmpXUlpCQzBmMFVoQkFib0xsWmkyNlZLMTQ0TnBEc1d0NkR0M2s5czhlZ0hPVnUrdUg5ZkdsUT0iLCJrZXkiOiJGQVNUUEFZIn0.F9pk_qSoxlSgJZF_8AZ8e-OaUex7P93memqnXdgX4Q4"
+}
+RESPONSE:
+{
+    "data": [
+        {
+            "wagonCode": "EKS",
+            "wagonNumber": 1,
+            "layout": [
+                {
+                    "row": 1,
+                    "column": "A",
+                    "class": "A",
+                    "isFilled": 1,
+                    "groupColumn": 1
+                },
+                {
+                    "row": 1,
+                    "column": "B",
+                    "class": "A",
+                    "isFilled": 1,
+                    "groupColumn": 1
+                },
+                {
+                    "row": 1,
+                    "column": "C",
+                    "class": "A",
+                    "isFilled": 0,
+                    "groupColumn": 2
+                },
+                {
+                    "row": 2,
+                    "column": "A",
+                    "class": "A",
+                    "isFilled": 0,
+                    "groupColumn": 1
+                },
+                {
+                    "row": 2,
+                    "column": "B",
+                    "class": "A",
+                    "isFilled": 0,
+                    "groupColumn": 1
+                },
+                {
+                    "row": 2,
+                    "column": "C",
+                    "class": "A",
+                    "isFilled": 0,
+                    "groupColumn": 2
+                },
+                {
+                    "row": 2,
+                    "column": "D",
+                    "class": "A",
+                    "is
+
+████ Change seat (obsolete) ████
+[POST] https://c-dev-travel.rajabiller.com/train/change_seat
+REQUEST:
+{
+  "productCode": "WKAI",
+  "bookingCode": "4ZB7U1T",
+  "transactionId": "2818213267",
+  "wagonCode": "EKS",
+  "wagonNumber": 3,
+  "seats": [
+    {
+      "row": 8,
+      "column": "B"
+    },
+    {
+      "row": 8,
+      "column": "A"
+    }
+  ],
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE3MjQxNDEyMTEsIm5iZiI6MTcyNDE0MTI3MCwiZXhwIjoxNzI0MTQ0ODEwLCJkYXRhIjoiQk1HTG0zeXdGTlJxT0lNSzZVbTNBaVErcmpXUlpCQzBmMFVoQkFib0xsWmkyNlZLMTQ0TnBEc1d0NkR0M2s5czhlZ0hPVnUrdUg5ZkdsUT0iLCJrZXkiOiJGQVNUUEFZIn0.F9pk_qSoxlSgJZF_8AZ8e-OaUex7P93memqnXdgX4Q4"
+}
+RESPONSE:
+{
+    "data": {},
+    "rc": "00",
+    "rd": "Success",
+    "mid": "5530967518",
+    "transactionId": "2818213270",
+    "seats": [
+        {
+            "row": 8,
+            "column": "B"
+        },
+        {
+            "row": 8,
+            "column": "A"
+        }
+    ],
+    "bookingCode": "4ZB7U1T",
+    "invoking": "Change Seat Train",
+    "processingTime": "1.389200925827 Second"
+}
+
+████ Change seat (recomended) ████
+[POST] https://c-dev-travel.rajabiller.com/train/change_seat
+REQUEST:
+{
+  "productCode": "WKAI",
+  "bookingCode": "H7688RX",
+  "transactionId": "2818579629",
+  "seats": [
+    {
+      "wagonCode" :"EKS",
+      "wagonNumber" :"3",
+      "row": 3,
+      "column": "C"
+      
+    },
+    {
+      "wagonCode" :"EKS",
+      "wagonNumber" :"2",
+      "row": 5,
+      "column": "B"
+    },
+    {
+      "wagonCode" :"EKS",
+      "wagonNumber" :"1",
+      "row": 5,
+      "column": "D"
+    },
+    {
+      "wagonCode" :"EKS",
+      "wagonNumber" :"5",
+      "row": 5,
+      "column": "A"
+    }
+  ],
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE3NDQ2MDEzNTUsIm5iZiI6MTc0NDYwMTQxNCwiZXhwIjoxNzQ0NjA0OTU0LCJkYXRhIjoiUTlwUzVocVo1dnIwNXJaUkxvOGlzWCtQc0tTYVwvTlFpYlprWWdQSVVqNkNuejZHOEhDcHNhMHZ5VzZHeFwvXC9Oa2hHS0dzQXNMbjVLb1dxRT0iLCJrZXkiOiJGQVNUUEFZIn0.EPZEXOXsGPizLzC3g0f7vBZR9trHmYU1itEG9VVrQyg"
+}
+RESPONSE:
+{
+    "data": {},
+    "rc": "00",
+    "rd": "Success",
+    "mid": "5538080095",
+    "transactionId": "2818579679",
+    "seats": [
+        {
+            "wagonCode": "EKO",
+            "wagonNumber": "1",
+            "row": 10,
+            "column": "A"
+        },
+        {
+            "wagonCode": "EKO",
+            "wagonNumber": "2",
+            "row": 20,
+            "column": "B"
+        }
+    ],
+    "bookingCode": "WPQ8VB7",
+    "invoking": "Change Seat Train",
+    "processingTime": "1.3712990283966 Second"
+}
+
+████ Cancel booking ████
+[POST] https://c-dev-travel.rajabiller.com/train/cancel_book
+REQUEST:
+{
+    "productCode": "WKAI",
+    "bookingCode": "EP081L2",
+    "transactionId": "2818582347",
+    "reason": "salah kereta, inilah alasannya saya cancel booking",
+    "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE3NDUyODQ5MjAsIm5iZiI6MTc0NTI4NDk4MCwiZXhwIjoxNzQ1Mjg4NTIwLCJkYXRhIjoidWZ6Y3dLK05PZ2JkbnBkdzBZYUxid1pqZldySnNNd3YrVTJEd0lRd21aWFRLMGprYzA1MFwvTVBldnlwOElYYWNDUHZOc0ZRWDVcLzhENGlRPSIsImtleSI6IkZBU1RQQVkifQ.6ZgTeCv-orN7KcpAGkvQ_P2hzaOV1VNG1bBn7dZbWUE"
+}
+RESPONSE:
+{
+    "rc": "00",
+    "rd": "Success",
+    "mid": "5538571508",
+    "invoking": "Cancel Book Train",
+    "processingTime": "0.66661691665649 Second"
+}
+
+████ Payment ████
+[POST] https://c-dev-travel.rajabiller.com/train/payment
+REQUEST:
+{
+  "productCode": "WKAI",
+  "bookingCode": "4ZB7U1T",
+  "transactionId": "2818213267",
+  "nominal": 2,
+  "nominal_admin": 0,
+  "discount": 0,
+  "pay_type": "TUNAI",
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE3MjQxNDEyMTEsIm5iZiI6MTcyNDE0MTI3MCwiZXhwIjoxNzI0MTQ0ODEwLCJkYXRhIjoiQk1HTG0zeXdGTlJxT0lNSzZVbTNBaVErcmpXUlpCQzBmMFVoQkFib0xsWmkyNlZLMTQ0TnBEc1d0NkR0M2s5czhlZ0hPVnUrdUg5ZkdsUT0iLCJrZXkiOiJGQVNUUEFZIn0.F9pk_qSoxlSgJZF_8AZ8e-OaUex7P93memqnXdgX4Q4"
+}
+RESPONSE:
+{
+    "data": {
+        "transaction_id": "2818213286",
+        "url_etiket": "https://h2h-api-travel-dev.kavl.ink/app/generate_etiket?id_transaksi=2818213286",
+        "url_image": "https://h2h-api-travel-dev.kavl.ink/app/generate_image_etiket?id_transaksi=2818213286",
+        "url_struk": "https://h2h-api-travel-dev.kavl.ink/app/generate_struk?id_transaksi=2818213286",
+        "komisi": 0
+    },
+    "rc": "00",
+    "rd": "Succes",
+    "mid": "5530967522",
+    "invoking": "Payment Train",
+    "processingTime": "12.006477117538 Second"
+}
+
+████ Transaction info ████
+[POST] https://c-dev-travel.rajabiller.com/app/transaction_info
+REQUEST:
+{
+  "product":"KERETA",
+  "transaction_id":"2818213267",
+  "token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE3MjQxNDEyMTEsIm5iZiI6MTcyNDE0MTI3MCwiZXhwIjoxNzI0MTQ0ODEwLCJkYXRhIjoiQk1HTG0zeXdGTlJxT0lNSzZVbTNBaVErcmpXUlpCQzBmMFVoQkFib0xsWmkyNlZLMTQ0TnBEc1d0NkR0M2s5czhlZ0hPVnUrdUg5ZkdsUT0iLCJrZXkiOiJGQVNUUEFZIn0.F9pk_qSoxlSgJZF_8AZ8e-OaUex7P93memqnXdgX4Q4"
+}
+RESPONSE:
+{
+    "data": {
+        "base": [
+            {
+                "key": "Komisi",
+                "value": "Rp 0,00"
+            },
+            {
+                "key": "Nama",
+                "value": "wong sholeh"
+            },
+            {
+                "key": "Nomor HP",
+                "value": "3522220922000981"
+            }
+        ],
+        "additional_data": [
+            {
+                "key": "Kode Booking",
+                "value": "J407F79"
+            },
+            {
+                "key": "Nama Kereta",
+                "value": "ARGO PARAHYANGAN PANORAMIC (43PC)"
+            },
+            {
+                "key": "Rute",
+                "value": "BANDUNG(BD) - GAMBIR (GMR)"
+            },
+            {
+                "key": "Tanggal Keberangkatan",
+                "value": "Selasa, 20 Agustus 2024"
+            },
+            {
+                "key": "Waktu Keberangkatan",
+                "value": "06:00"
+            },
+            {
+                "key": "Waktu Kedatangan",
+                "value": "08:45"
+            },
+            {
+                "key": "Kursi",
+                "value": "EKS-1/7B"
+            }
+        ],
+        "data_detail": null
+    },
+    "rc": "00",
+    "rd": "Success",
+    "mid": null,
+    "komisi": 0,
+    "url_etiket": "https://h2h-api-travel-dev.kavl.ink/app/generate_etiket?id_transaksi=2818212401",
+    "url_struk": "https://h2h-api-travel-dev.kavl.ink/app/generate_struk?id_transaksi=2818212401",
+    "url_image": "https:
+
+████ Transaction status ████
+[POST] https://c-dev-travel.rajabiller.com/app/transaction_status
+REQUEST:
+{
+    "product":"KERETA",
+    "bookCode" : "W897IU9",
+    "token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE3MjQxNDEyMTEsIm5iZiI6MTcyNDE0MTI3MCwiZXhwIjoxNzI0MTQ0ODEwLCJkYXRhIjoiQk1HTG0zeXdGTlJxT0lNSzZVbTNBaVErcmpXUlpCQzBmMFVoQkFib0xsWmkyNlZLMTQ0TnBEc1d0NkR0M2s5czhlZ0hPVnUrdUg5ZkdsUT0iLCJrZXkiOiJGQVNUUEFZIn0.F9pk_qSoxlSgJZF_8AZ8e-OaUex7P93memqnXdgX4Q4"
+}
+RESPONSE:
+{
+    "data": {
+        "id_transaksi": 2818213286,
+        "bookCode": "4ZB7U1T",
+        "Produk": "Kereta Api",
+        "Status": "Payment",
+        "status_booking": "Sukses",
+        "status_payment": "Sukses otomatis"
+    },
+    "rc": "00",
+    "rd": "Success",
+    "invoking": "Transaction Status App",
+    "processingTime": "0.2985680103302 Second"
+}
+
+████ Transaction list ████
+[POST] https://c-dev-travel.rajabiller.com/app/transaction_list
+REQUEST:
+{
+    "product":"KERETA",
+    "token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE3MjQxNDEyMTEsIm5iZiI6MTcyNDE0MTI3MCwiZXhwIjoxNzI0MTQ0ODEwLCJkYXRhIjoiQk1HTG0zeXdGTlJxT0lNSzZVbTNBaVErcmpXUlpCQzBmMFVoQkFib0xsWmkyNlZLMTQ0TnBEc1d0NkR0M2s5czhlZ0hPVnUrdUg5ZkdsUT0iLCJrZXkiOiJGQVNUUEFZIn0.F9pk_qSoxlSgJZF_8AZ8e-OaUex7P93memqnXdgX4Q4"
+}
+RESPONSE:
+{
+    "data": [
+        {
+            "id_transaksi": 2818212401,
+            "tanggal_transaksi": "Senin, 19 Agustus 2024",
+            "kode_booking": "J407F79",
+            "origin": "BANDUNG",
+            "destination": "GAMBIR",
+            "tanggal_keberangkatan": "20240820",
+            "hari_keberangkatan": "",
+            "jam_keberangkatan": "0600",
+            "tanggal_kedatangan": "",
+            "hari_kedatangan": "",
+            "jam_kedatangan": "0845",
+            "kode_kereta": "EKS-1/7B",
+            "nama_kereta": "ARGO PARAHYANGAN PANORAMIC (43PC)",
+            "classes": "EKS",
+            "penumpang": [
+                {
+                    "nama": "wong sholeh",
+                    "kursi": "EKS-1/7B",
+                    "telepon": "085648889211",
+                    "nomor_identitas": "3522220922000981"
+                }
+            ],
+            "nominal": "1",
+            "nominal_admin": "7500",
+            "komisi": 0,
+            "url_etiket": "https://h2h-api-travel-dev.kavl.ink/app/generate_etiket?id_transaksi=2818212401",
+            "url_struk": "https://h2h-api-travel-dev.kavl.ink/app/generate_struk?id_transaksi=2818212401",
+            "url_image": "https://h2h-api-travel-dev.kavl.ink/app/generate_struk?id_transaksi=2818212401"
+        },
+        {
+            "id_transaksi": 2818212464,
+            "tanggal_transaksi": "Senin, 19 Agustus 2024",
+            "kode_booking": "NOA7XHZ",
+            "origin": "BANDUNG",
+            "destinatio
+
+████ Transaction book list ████
+[POST] 
+REQUEST:
+eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE3MjQxNDEyMTEsIm5iZiI6MTcyNDE0MTI3MCwiZXhwIjoxNzI0MTQ0ODEwLCJkYXRhIjoiQk1HTG0zeXdGTlJxT0lNSzZVbTNBaVErcmpXUlpCQzBmMFVoQkFib0xsWmkyNlZLMTQ0TnBEc1d0NkR0M2s5czhlZ0hPVnUrdUg5ZkdsUT0iLCJrZXkiOiJGQVNUUEFZIn0.F9pk_qSoxlSgJZF_8AZ8e-OaUex7P93memqnXdgX4Q4
+RESPONSE:
+{
+    "rc": "33",
+    "rd": "Tidak Ditemukan",
+    "mid": null,
+    "invoking": "Transaction List App",
+    "processingTime": "0.15187501907349 Second"
+}

@@ -161,10 +161,12 @@
                 <td style="padding:5px 0; font-size:13px; color:#64748b;">Biaya layanan platform (12%)</td>
                 <td style="padding:5px 0; font-size:13px; color:#1e293b; text-align:right;">Rp {{ $markupAmt }}</td>
               </tr>
+              @if((float)$booking->tax_amount > 0)
               <tr>
-                <td style="padding:5px 0; font-size:13px; color:#64748b;">PPN (11%)</td>
+                <td style="padding:5px 0; font-size:13px; color:#64748b;">PPN</td>
                 <td style="padding:5px 0; font-size:13px; color:#1e293b; text-align:right;">Rp {{ $taxAmt }}</td>
               </tr>
+              @endif
               @if((float)$booking->promo_discount > 0)
               <tr>
                 <td style="padding:5px 0; font-size:13px; color:#16a34a;">Diskon promo</td>

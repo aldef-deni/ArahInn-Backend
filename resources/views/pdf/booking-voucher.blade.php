@@ -224,7 +224,9 @@
     <table class="price">
       <tr class="muted"><td>Harga kamar ({{ $nights }} malam × {{ $booking->room_count ?? 1 }} kamar)</td><td>Rp {{ $basePrice }}</td></tr>
       <tr class="muted"><td>Biaya layanan platform (12%)</td><td>Rp {{ $markupAmt }}</td></tr>
-      <tr class="muted"><td>PPN (11%)</td><td>Rp {{ $taxAmt }}</td></tr>
+      @if((float)$booking->tax_amount > 0)
+      <tr class="muted"><td>PPN</td><td>Rp {{ $taxAmt }}</td></tr>
+      @endif
       @if((float)$booking->promo_discount > 0)
       <tr class="discount"><td>Diskon promo</td><td>− Rp {{ $promoDisc }}</td></tr>
       @endif

@@ -41,12 +41,70 @@ return [
         'redirect'      => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    'apple' => [
+        'bundle_id' => env('APPLE_BUNDLE_ID', 'com.arahinn.mobile'),
+    ],
+
+    // ── Payment mode ───────────────────────────────────────────────
+    // 'doku'   = pakai DOKU SNAP BI VA gateway (production normal)
+    // 'manual' = manual bank transfer (sementara, sebelum izin company beres)
+    'payment' => [
+        'mode' => env('PAYMENT_MODE', 'doku'),
+        'manual_bank' => [
+            'bank_name'       => env('PAYMENT_MANUAL_BANK_NAME', 'BCA'),
+            'account_number'  => env('PAYMENT_MANUAL_ACCOUNT_NUMBER', '8040083848'),
+            'account_name'    => env('PAYMENT_MANUAL_ACCOUNT_NAME', 'Rahmat Hidayattulah'),
+            'expires_hours'   => env('PAYMENT_MANUAL_EXPIRES_HOURS', 24),
+        ],
+    ],
+
     'raja_biller' => [
-        'base_url' => env('RAJA_BILLER_BASE_URL', 'https://sandbox.rajabiller.com'),
-        'api_key'  => env('RAJA_BILLER_API_KEY', ''),
-        'secret'   => env('RAJA_BILLER_SECRET', ''),
-        'username' => env('RAJA_BILLER_USERNAME', ''),
-        'sandbox'  => env('RAJA_BILLER_SANDBOX', true),
+        // Endpoint JSON API (devel atau production)
+        'url'     => env('RAJA_BILLER_URL', 'https://c-dev-api.rajabiller.com/api_json.php'),
+        // Credential (didapat dari Rajabiller via SMS saat registrasi)
+        'uid'     => env('RAJA_BILLER_UID', ''),
+        'pin'     => env('RAJA_BILLER_PIN', ''),
+        // HTTP timeout (doctek: 45 detik untuk match Rajabiller behavior)
+        'timeout' => env('RAJA_BILLER_TIMEOUT', 45),
+        // Flag environment (untuk monitoring/log)
+        'sandbox' => env('RAJA_BILLER_SANDBOX', true),
+    ],
+
+    // ── Rajabiller XAS (SAAS Travel Checkout Page) ─────────────────────
+    // Used untuk integrasi tiket pesawat, kereta, bus (DLU), pelni.
+    // Mode: Checkout Page — payment fully handled di Winpay/Rajabiller,
+    // mitra cuma generate credential & redirect customer ke embed_fe_url.
+    'raja_xas' => [
+        'url'           => env('RAJA_XAS_URL', 'https://h2h-saas-checkout-page.rajabiller.com/api'),
+        'client_key'    => env('RAJA_XAS_CLIENT_KEY', ''),       // UUID dari CS Rajabiller
+        'client_secret' => env('RAJA_XAS_CLIENT_SECRET', ''),    // Header secret dari CS
+        'id_outlet'     => env('RAJA_XAS_ID_OUTLET', env('RAJA_BILLER_UID', '')),
+        'pin'           => env('RAJA_XAS_PIN',       env('RAJA_BILLER_PIN', '')),
+        'merchant'      => env('RAJA_XAS_MERCHANT',  'arahinn'),
+        'timeout'       => env('RAJA_XAS_TIMEOUT', 30),
+        // Callback & redirect URL — diisi env supaya bisa di-override per env
+        'url_callback'  => env('RAJA_XAS_CALLBACK_URL', env('APP_URL', 'https://ota-backend.arahinn.com') . '/api/v1/xas/callback'),
+        'url_redirect'  => env('RAJA_XAS_REDIRECT_URL', env('FRONTEND_URL', 'https://arahinn.com') . '/tiket/result'),
+    ],
+
+    // ── Rajabiller Travel (DIRECT API) ─────────────────────────────────
+    // API langsung (bukan XAS webview). Auth: JWT token via /app/sign_in
+    // (outlet_id + pin), token valid 1 hari, dikirim di body. TANPA signature.
+    // Doc: docs/rajabiller-travel-kai-api.md
+    'raja_travel' => [
+        // Per info CS Rajabiller (2026-06-04): KERETA(KAI) di DEVEL, PESAWAT & PELNI di PRODUCTION.
+        // Dua channel terpisah (base URL + PIN berbeda), UID sama.
+        'timeout' => env('RAJA_TRAVEL_TIMEOUT', 45),
+
+        // KERETA (KAI) — DEVEL
+        'kai_url'       => env('RAJA_TRAVEL_KAI_URL', 'https://c-dev-travel.rajabiller.com'),
+        'kai_outlet_id' => env('RAJA_TRAVEL_KAI_OUTLET_ID', env('RAJA_BILLER_UID', 'SP347829')),
+        'kai_pin'       => env('RAJA_TRAVEL_KAI_PIN', '311575'),
+
+        // PESAWAT & PELNI — PRODUCTION (IP whitelist 103.76.121.180)
+        'prod_url'       => env('RAJA_TRAVEL_URL', 'https://rajabiller.fastpay.co.id/travel'),
+        'prod_outlet_id' => env('RAJA_TRAVEL_OUTLET_ID', env('RAJA_BILLER_UID', 'SP347829')),
+        'prod_pin'       => env('RAJA_TRAVEL_PIN', env('RAJA_BILLER_PIN', '681768')),
     ],
 
     'doku' => [

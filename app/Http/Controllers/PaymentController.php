@@ -13,18 +13,87 @@ class PaymentController extends Controller
 
     public function initiate(Request $request)
     {
-        $data = $request->validate([
-            'booking_id'     => 'required|integer|exists:bookings,id',
-            'payment_method' => 'required|string|in:bca,mandiri,bri,bsi',
-        ]);
+        $mode = \App\Http\Controllers\Admin\SettingController::paymentMode();
+
+        // Untuk manual mode, payment_method tidak wajib (selalu bank_transfer)
+        $rules = ['booking_id' => 'required|integer|exists:bookings,id'];
+        if ($mode !== 'manual') {
+            $rules['payment_method'] = 'required|string|in:bca,mandiri,bri,bsi';
+        }
+        $data = $request->validate($rules);
 
         try {
             $booking = Booking::with(['hotel', 'room'])->findOrFail($data['booking_id']);
-            $result  = $this->payment->initiate($booking, $data['payment_method']);
+            $method  = $data['payment_method'] ?? 'bank_transfer';
+            $result  = $this->payment->initiate($booking, $method);
             return response()->json(['success' => true, 'data' => $result]);
         } catch (\Exception $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
         }
+    }
+
+    /**
+     * Customer upload bukti transfer (manual mode).
+     */
+    public function uploadProof(Request $request, string $bookingId)
+    {
+        $request->validate([
+            'proof' => 'required|file|mimes:jpg,jpeg,png,pdf|max:5120',
+        ]);
+
+        $booking = Booking::findOrFail($bookingId);
+        if ((int) $booking->user_id !== (int) $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
+        }
+
+        $file     = $request->file('proof');
+        $dir      = storage_path('app/public/uploads/payment-proofs');
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        $filename = 'proof_' . $booking->booking_code . '_' . time() . '.' . $file->getClientOriginalExtension();
+        $file->move($dir, $filename);
+        $relPath  = 'uploads/payment-proofs/' . $filename;
+
+        $payment = $this->payment->attachProof($booking, $relPath);
+
+        return response()->json(['success' => true, 'data' => $payment]);
+    }
+
+    /**
+     * Admin manual confirm: pembayaran transfer sudah masuk rekening.
+     */
+    public function confirmManual(Request $request, string $bookingId)
+    {
+        $request->validate(['notes' => 'nullable|string|max:500']);
+
+        $booking = Booking::findOrFail($bookingId);
+        try {
+            $result = $this->payment->confirmManualPayment(
+                $booking,
+                $request->user()->id,
+                $request->input('notes')
+            );
+            return response()->json(['success' => true, 'data' => $result]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * Public: cek mode pembayaran aktif (untuk FE branching UI).
+     */
+    public function mode()
+    {
+        $mode = \App\Http\Controllers\Admin\SettingController::paymentMode();
+        $data = ['mode' => $mode];
+        if ($mode === 'manual') {
+            $bank = \App\Http\Controllers\Admin\SettingController::manualBank();
+            $data['bank'] = [
+                'bank_name'      => $bank['bank_name'],
+                'account_number' => $bank['account_number'],
+                'account_name'   => $bank['account_name'],
+            ];
+        }
+        return response()->json(['success' => true, 'data' => $data]);
     }
 
     public function webhookDoku(Request $request)

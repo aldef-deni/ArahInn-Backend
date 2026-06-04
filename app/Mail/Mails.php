@@ -205,7 +205,7 @@ class NewReservationMail extends Mailable implements ShouldQueue
 </table>
 
 <p style='color:#64748b;font-size:13px'>Pastikan kamar sudah siap sebelum tanggal check-in. Jika ada pertanyaan, hubungi <a href='mailto:cs@arahinn.com' style='color:#2563eb;text-decoration:none'>cs@arahinn.com</a>.</p>
-<a class='btn' href='" . config('app.frontend_url', 'https://extranet.arahinn.com') . "/owner/pesanan'>Lihat Semua Reservasi</a>";
+<a class='btn' href='" . config('app.frontend_url', 'https://my.arahinn.com') . "/owner/pesanan'>Lihat Semua Reservasi</a>";
 
         return new Content(htmlString: baseHtml('Reservasi Baru', $body));
     }

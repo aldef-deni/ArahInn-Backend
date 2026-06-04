@@ -1,0 +1,632 @@
+
+████ airport ████
+[POST] https://rajabiller.fastpay.co.id/travel/flight/airport
+REQUEST:
+{ 
+    "token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2NzQwOTcxMDMsIm5iZiI6MTY3NDA5NzE2MywiZXhwIjoxNjc0MTAwNzAzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9.epTammJUMHgp694NSXpy663ORK4vqi3C9OfvxamT0f0"
+}
+RESPONSE:
+{
+    "data": [
+        {
+            "code": "DUS",
+            "name": "Dusseldorf (DUS), Germany",
+            "bandara": "Dusseldorf Intl",
+            "group": "Internasional"
+        },
+        {
+            "code": "TRZ",
+            "name": "Tiruchirappalli (TRZ), India",
+            "bandara": "Tiruchirappalli",
+            "group": "Internasional"
+        },
+        {
+            "code": "BKI",
+            "name": "Kota Kinabalu (BKI), Malaysia",
+            "bandara": "Kota Kinabalu",
+            "group": "Internasional"
+        },
+        {
+            "code": "TRV",
+            "name": "Trivandrum (TRV), India",
+            "bandara": "Trivandrum",
+            "group": "Internasional"
+        },
+        {
+            "code": "PVG",
+            "name": "Shanghai Pudong (PVG), China",
+            "bandara": "Shanghai Pudong",
+            "group": "Internasional"
+        },
+        {
+            "code": "KWE",
+            "name": "Guiyang (KWE), China",
+            "bandara": "Longdongbao",
+            "group": "Internasional"
+        },
+        {
+            "code": "PHS",
+            "name": "Phitsanulok (PHS), Thailand",
+            "bandara": "Phitsanulok",
+            "group": "Internasional"
+        },
+        {
+            "code": "KXB",
+            "name": "Pomala Kolaka Airport (KXB)",
+            "bandara": "Sangia Nibanderia",
+            "group": "Domestik
+
+████ list plane ████
+[POST] https://rajabiller.fastpay.co.id/travel/flight/configuration
+REQUEST:
+{ 
+    "token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2NzQwOTcxMDMsIm5iZiI6MTY3NDA5NzE2MywiZXhwIjoxNjc0MTAwNzAzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9.epTammJUMHgp694NSXpy663ORK4vqi3C9OfvxamT0f0"
+}
+RESPONSE:
+{
+    "data": {
+        "settings": [
+            {
+                "airline": "TPQG",
+                "isActive": "1",
+                "customAdmin": "null",
+                "airlineName": "CITILINK",
+                "isCaptcha": "0",
+                "isInfant": "1",
+                "isChild": "1",
+                "icon": "https://api.fastravel.co.id/assets/maskapai/TPQG.png",
+                "switcherId": "1",
+                "newsUrl": "http://www.fastravel.co.id/citilink.php"
+            },
+            {
+                "airline": "TPGA",
+                "isActive": "1",
+                "customAdmin": "null",
+                "airlineName": "GARUDA",
+                "isCaptcha": "0",
+                "isInfant": "1",
+                "isChild": "1",
+                "icon": "https://api.fastravel.co.id/assets/maskapai/TPGA.png",
+                "switcherId": "1",
+                "newsUrl": "http://www.fastravel.co.id/garuda.php"
+            },
+            {
+                "airline": "TP3K",
+                "isActive": "1",
+                "customAdmin": "null",
+                "airlineName": "JETSTAR",
+                "isCaptcha": "1",
+                "isInfant": "1",
+                "isChild": "0",
+                "icon": "https://api.fastravel.co.id/assets/maskapai/TPJQ.png",
+                "switcherId": "1",
+                "newsUrl": "http://www.fastravel.co.id/jetstar.ph
+
+████ search ████
+[POST] https://rajabiller.fastpay.co.id/travel/flight/search
+REQUEST:
+{
+    "airline" : "TPJT",
+    "departure" : "SUB",
+    "arrival" : "CGK",
+    "departureDate" : "2023-04-22",
+    "returnDate" : "2023-04-22",
+    "isLowestPrice" : true,
+    "adult" : 1,
+    "child" : 0,
+    "infant" : 0,
+    "token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2NzQwOTcxMDMsIm5iZiI6MTY3NDA5NzE2MywiZXhwIjoxNjc0MTAwNzAzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9.epTammJUMHgp694NSXpy663ORK4vqi3C9OfvxamT0f0"
+}
+RESPONSE:
+{
+    "data": [
+        {
+            "classes": [
+                [
+                    {
+                        "availability": 9,
+                        "seatKey": "M0_C1_F0_S16",
+                        "class": "Q",
+                        "price": 729980,
+                        "departureTime": "07:40",
+                        "depatureTime": "07:40",
+                        "arrivalTime": "09:05",
+                        "flightCode": "JT573",
+                        "departure": "SUB",
+                        "departureName": "Juanda",
+                        "arrival": "CGK",
+                        "arrivalName": "Soekarno – Hatta",
+                        "isInternational": 0,
+                        "departureTimeZone": "7.00",
+                        "arrivalTimeZone": "7.00",
+                        "departureTimeZoneText": "WIB",
+                        "arrivalTimeZoneText": "WIB",
+                        "seat": "9;M0_C1_F0_S16;Q;729980;09:05;lion-with-tpjts;;2023-04-22;07:40;09:05;JT573;SUB;CGK",
+                        "duration": "1j25m",
+                        "departureDate": "2023-04-22",
+                        "arrivalDate": "2023-04-22"
+                    }
+                ]
+            ],
+            "title": "JT573 SUB CGK 07:40-09:05",
+            "isTransit": false,
+            "detailTitle": [
+                {
+                    "flightIcon
+
+████ fare ████
+[POST] https://rajabiller.fastpay.co.id/travel/flight/fare
+REQUEST:
+{
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2NzQwOTcxMDMsIm5iZiI6MTY3NDA5NzE2MywiZXhwIjoxNjc0MTAwNzAzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9.epTammJUMHgp694NSXpy663ORK4vqi3C9OfvxamT0f0",
+  "airline": "TPJT",
+  "departure": "SUB",
+  "arrival": "CGK",
+  "departureDate": "2023-04-22",
+  "returnDate": "",
+  "adult": "1",
+  "child": 0,
+  "infant": 0,
+  "seats": [
+    "9;M0_C1_F0_S16;Q;729980;09:05;lion-with-tpjts;;2023-04-22;07:40;09:05;JT573;SUB;CGK"
+  ]
+}
+RESPONSE:
+{
+    "data": {
+        "departureTime": "07:40",
+        "arrivalTime": "09:05",
+        "price": "729980",
+        "baggage": "20",
+        "settings": {
+            "TPQG": {
+                "isActive": "1",
+                "customAdmin": "null",
+                "airlineName": "CITILINK",
+                "isCaptcha": "0",
+                "isInfant": "1",
+                "isChild": "1",
+                "icon": "https://api.fastravel.co.id/assets/maskapai/TPQG.png",
+                "switcherId": "1"
+            },
+            "TPGA": {
+                "isActive": "1",
+                "customAdmin": "null",
+                "airlineName": "GARUDA INDONESIA",
+                "isCaptcha": "0",
+                "isInfant": "1",
+                "isChild": "1",
+                "icon": "https://api.fastravel.co.id/assets/maskapai/TPGA.png",
+                "switcherId": "1"
+            },
+            "TP3K": {
+                "isActive": "1",
+                "customAdmin": "null",
+                "airlineName": "JETSTAR",
+                "isCaptcha": "1",
+                "isInfant": "1",
+                "isChild": "0",
+                "icon": "https://api.fastravel.co.id/assets/maskapai/TPJQ.png",
+                "switcherId": "1"
+            },
+            "TPKP": {
+                "isActive": "1",
+                "customAdmin": "null",
+                "airlineName": "KALSTAR AVIATION
+
+████ booking 1 adult ████
+[POST] https://rajabiller.fastpay.co.id/travel/flight/book
+REQUEST:
+{
+  "airline": "TPJT",
+  "departure": "SUB",
+  "arrival": "CGK",
+  "departureDate": "2023-04-22",
+  "returnDate ": "",
+  "adult": "1",
+  "child": 0,
+  "infant": 0,
+  "flights": [
+    "9;M0_C1_F0_S16;Q;729980;09:05;lion-with-tpjts;;2023-04-22;07:40;09:05;JT573;SUB;CGK"
+  ],
+  "passengers": {
+    "adults": [
+      "ADT;MR;fitra;alfiananto;04\/19\/1990;3524221904900003;::085648889293;::085648889293;;;;fitra@gmail.com;1;ID;ID;;;ID;"
+    ],
+    "children": [
+      
+    ],
+    "infants": [
+      
+    ]
+  },
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2NzQwOTcxMDMsIm5iZiI6MTY3NDA5NzE2MywiZXhwIjoxNjc0MTAwNzAzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9.epTammJUMHgp694NSXpy663ORK4vqi3C9OfvxamT0f0"
+}
+RESPONSE:
+{
+    "data": {
+        "passengers": "ADT;MR;fitra alfiananto ;3524221904900003|",
+        "details": "ZQWENG;2023-04-12;12-Apr-2023 19:25;-|#ADT;MR;fitra alfiananto ;3524221904900003|#22-April-2023;JT573;07:40;09:05;BOOKED;SUB;CGK|#716680;;739980;716680|#;lion",
+        "bookingCode": "ZQWENG",
+        "paymentCode": "",
+        "flightCode1": "JT573",
+        "departureTime1": "07:40",
+        "arrivalTime1": "09:05",
+        "reservationDate": "12-Apr-2023",
+        "timeLimit": "12-Apr-2023 19:10",
+        "timeLimitYMD": "2023-04-12 19:10",
+        "flightInfoGo": "2023-04-22",
+        "nominal": "739980",
+        "comission": "0",
+        "nominalAdmin": "0",
+        "transactionId": "60386419",
+        "komisi": 0
+    },
+    "rc": "00",
+    "rd": "Sukses",
+    "mid": "1681273509019292597",
+    "invoking": "Book Flight",
+    "processingTime": "28.442264080048 Second"
+}
+
+████ booking 1 adult 1 child ████
+[POST] https://rajabiller.fastpay.co.id/travel/flight/book
+REQUEST:
+{
+  "airline": "TPGA",
+  "departure": "SUB",
+  "arrival": "CGK",
+  "departureDate": "2023-04-30",
+  "returnDate ": "",
+  "adult": "1",
+  "child": "1",
+  "infant": 0,
+  "flights": [
+    "3;GA~ 305~ ~~SUB~04\/30\/2023 07:05~CGK~04\/30\/2023 08:40~SEPARATOR24dwkb3My5EvYchLRXaGta2Koq89jh473KnhbLHyBtDJyX7iaiEyuWDn8nnLa5hAo4JSov54r~SEPARATORGA~ 305~ ~~SUB~04\/30\/2023 07:05~CGK~04\/30\/2023 08:40~SEPARATOR1111MTvpZ57GnMrnDZfP3wG4339v8pVN9uzWnM2P6PbSGPUyQm9Ybja5Rxk6PaqTCDDypxT~;Y;3099760;07:05;garudav5;;;07:05;08:40;GA305;SUB;CGK;2023-04-30"
+  ],
+  "passengers": {
+    "adults": [
+      "ADT;MR;fitra;alfiananto;04\/19\/1990;3524221904900003;::085648889293;::085648889293;;;;fitra@gmail.com;1;ID;ID;;;ID;"
+    ],
+    "children": [
+      "CHD;MSTR;m;rafif;11\/25\/2018;3515172511180001;ID;ID;;;ID;"
+    ],
+    "infants": [
+      
+    ]
+  },
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2ODEyODUwMzMsIm5iZiI6MTY4MTI4NTA5MywiZXhwIjoxNjgxMjg4NjMzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9._Hs4WZN9ZHOF4Ks12AeZDCn10CFKyEThSzblG1BH7qs"
+}
+RESPONSE:
+{
+    "data": {
+        "passengers": "ADT;MR;fitra alfiananto;|CHD;MSTR;m rafif;|",
+        "details": "6XOVYT;2023-04-12;2023-04-12 16:42:52;-|#ADT;MR;fitra alfiananto;|CHD;MSTR;m rafif|#30-April-2023;GA305;07:05;08:40;BOOKED;SUB;CGK|#3008267;;3099760;3008267|#;garudav5",
+        "bookingCode": "6XOVYT",
+        "paymentCode": "",
+        "flightCode1": "GA305",
+        "departureTime1": "07:05",
+        "arrivalTime1": "08:40",
+        "reservationDate": "12-Apr-2023",
+        "timeLimit": "12-Apr-2023 16:42",
+        "timeLimitYMD": "2023-04-12 16:42",
+        "flightInfoGo": "2023-04-30",
+        "nominal": "3099760",
+        "comission": "77676.708",
+        "nominalAdmin": "0",
+        "transactionId": "60489667",
+        "komisi": 77677
+    },
+    "rc": "00",
+    "rd": "Success",
+    "mid": "1681285358041191577",
+    "invoking": "Book Flight",
+    "processingTime": "15.245493888855 Second"
+}
+
+████ booking 2 adult ████
+[POST] https://rajabiller.fastpay.co.id/travel/flight/book
+REQUEST:
+{
+  "airline": "TPGA",
+  "departure": "SUB",
+  "arrival": "CGK",
+  "departureDate": "2023-04-30",
+  "returnDate ": "",
+  "adult": "1",
+  "child": "1",
+  "infant": 0,
+  "flights": [
+    "3;GA~ 305~ ~~SUB~04\/30\/2023 07:05~CGK~04\/30\/2023 08:40~SEPARATOR24dwkb3My5EvYchLRXaGta2Koq89jh473KnhbLHyBtDJyX7iaiEyuWDn8nnLa5hAo4JSov54r~SEPARATORGA~ 305~ ~~SUB~04\/30\/2023 07:05~CGK~04\/30\/2023 08:40~SEPARATOR1111MTvpZ57GnMrnDZfP3wG4339v8pVN9uzWnM2P6PbSGPUyQm9Ybja5Rxk6PaqTCDDypxT~;Y;3099760;07:05;garudav5;;;07:05;08:40;GA305;SUB;CGK;2023-04-30"
+  ],
+  "passengers": {
+    "adults": [
+      "ADT;MR;fitra;alfiananto;04\/19\/1990;3524221904900003;::085648889293;::085648889293;;;;fitra@gmail.com;1;ID;ID;;;ID;"
+    ],
+    "children": [
+      "CHD;MSTR;m;rafif;11\/25\/2018;3515172511180001;ID;ID;;;ID;"
+    ],
+    "infants": [
+      
+    ]
+  },
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2ODEyODUwMzMsIm5iZiI6MTY4MTI4NTA5MywiZXhwIjoxNjgxMjg4NjMzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9._Hs4WZN9ZHOF4Ks12AeZDCn10CFKyEThSzblG1BH7qs"
+}
+RESPONSE:
+{
+    "data": {
+        "passengers": "ADT;MR;fitra alfiananto;3524221904900003|ADT;MRS;dyah arum;3515175808910002|",
+        "details": "LIPTFK;2023-04-12;13-Apr-2023 14:51;231731041121|#ADT;MR;fitra alfiananto;3524221904900003|ADT;MRS;dyah arum;3515175808910002|#02-Mei-2023;QG 725;06:00;07:30;BOOKED;SUB;CGK|#2630934;;2689782;2630934|#231731041121;citilink",
+        "bookingCode": "LIPTFK",
+        "paymentCode": "231731041121",
+        "flightCode1": "QG 725",
+        "departureTime1": "06:00",
+        "arrivalTime1": "07:30",
+        "reservationDate": "12-Apr-2023",
+        "timeLimit": "13-Apr-2023 14:51",
+        "timeLimitYMD": "2023-04-13 14:51",
+        "flightInfoGo": "2023-05-02",
+        "nominal": "2689782",
+        "comission": "30784",
+        "nominalAdmin": "0",
+        "transactionId": "60493884",
+        "komisi": 30784
+    },
+    "rc": "00",
+    "rd": "SUKSES",
+    "mid": "1681285867765988207",
+    "invoking": "Book Flight",
+    "processingTime": "3.124009847641 Second"
+}
+
+████ search transit ████
+[POST] https://rajabiller.fastpay.co.id/travel/flight/search
+REQUEST:
+{
+    "airline" : "TPJT",
+    "departure" : "SUB",
+    "arrival" : "CGK",
+    "departureDate" : "2023-04-22",
+    "returnDate" : "2023-04-22",
+    "isLowestPrice" : true,
+    "adult" : 1,
+    "child" : 0,
+    "infant" : 0,
+    "token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2NzQwOTcxMDMsIm5iZiI6MTY3NDA5NzE2MywiZXhwIjoxNjc0MTAwNzAzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9.epTammJUMHgp694NSXpy663ORK4vqi3C9OfvxamT0f0"
+}
+RESPONSE:
+{
+    "data": [
+        {
+            "classes": [
+                [
+                    {
+                        "availability": 9,
+                        "seatKey": "M0_C0_F0_S12",
+                        "class": "K",
+                        "price": 1764280,
+                        "departureTime": "05:20",
+                        "depatureTime": "05:20",
+                        "arrivalTime": "09:30",
+                        "flightCode": "JT971",
+                        "departure": "SUB",
+                        "departureName": "Juanda",
+                        "arrival": "KNO",
+                        "arrivalName": "Kualanamu",
+                        "isInternational": 0,
+                        "departureTimeZone": "7.00",
+                        "arrivalTimeZone": "7.00",
+                        "departureTimeZoneText": "WIB",
+                        "arrivalTimeZoneText": "WIB",
+                        "seat": "9;M0_C0_F0_S12;K;1764280;09:30;lion-with-tpjts;;2023-05-02;05:20;09:30;JT971;SUB;KNO",
+                        "duration": "4j10m",
+                        "departureDate": "2023-05-02",
+                        "arrivalDate": "2023-05-02"
+                    }
+                ]
+            ],
+            "title": "JT971 SUB KNO 05:20-09:30",
+            "isTransit": false,
+            "detailTitle": [
+                {
+                    "flightIcon": "h
+
+████ fare transit ████
+[POST] https://rajabiller.fastpay.co.id/travel/flight/fare
+REQUEST:
+{
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2ODEyODUwMzMsIm5iZiI6MTY4MTI4NTA5MywiZXhwIjoxNjgxMjg4NjMzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9._Hs4WZN9ZHOF4Ks12AeZDCn10CFKyEThSzblG1BH7qs",
+  "airline": "TPJT",
+  "departure": "SUB",
+  "arrival": "KNO",
+  "departureDate": "2023-05-02",
+  "returnDate": "",
+  "adult": "2",
+  "child": 0,
+  "infant": 0,
+  "seats": [
+    "7;M0_C2_F0_S7;G;1983500;06:25;lion-with-tpjts;;2023-05-02;05:00;10:20;ID6589;SUB;CGK",
+    "9;M0_C2_F1_S18;V;0;;lion-with-tpjts;;2023-05-02;08:00;10:20;ID6882;CGK;KNO"
+  ]
+}
+RESPONSE:
+{
+    "data": {
+        "departureTime": "05:00",
+        "arrivalTime": "10:20",
+        "price": "4650160",
+        "baggage": "20",
+        "settings": {
+            "TPQG": {
+                "isActive": "1",
+                "customAdmin": "null",
+                "airlineName": "CITILINK",
+                "isCaptcha": "0",
+                "isInfant": "1",
+                "isChild": "1",
+                "icon": "https://api.fastravel.co.id/assets/maskapai/TPQG.png",
+                "switcherId": "1"
+            },
+            "TPGA": {
+                "isActive": "1",
+                "customAdmin": "null",
+                "airlineName": "GARUDA INDONESIA",
+                "isCaptcha": "0",
+                "isInfant": "1",
+                "isChild": "1",
+                "icon": "https://api.fastravel.co.id/assets/maskapai/TPGA.png",
+                "switcherId": "1"
+            },
+            "TP3K": {
+                "isActive": "1",
+                "customAdmin": "null",
+                "airlineName": "JETSTAR",
+                "isCaptcha": "1",
+                "isInfant": "1",
+                "isChild": "0",
+                "icon": "https://api.fastravel.co.id/assets/maskapai/TPJQ.png",
+                "switcherId": "1"
+            },
+            "TPKP": {
+                "isActive": "1",
+                "customAdmin": "null",
+                "airlineName": "KALSTAR AVIATIO
+
+████ booking 2 adult transit ████
+[POST] https://rajabiller.fastpay.co.id/travel/flight/book
+REQUEST:
+{
+  "airline": "TPJT",
+  "departure": "SUB",
+  "arrival": "KNO",
+  "departureDate": "2023-05-02",
+  "returnDate ": "",
+  "adult": "2",
+  "child": 0,
+  "infant": 0,
+  "flights": [
+    "7;M0_C2_F0_S7;G;1983500;06:25;lion-with-tpjts;;2023-05-02;05:00;10:20;ID6589;SUB;CGK",
+    "9;M0_C2_F1_S18;V;0;;lion-with-tpjts;;2023-05-02;08:00;10:20;ID6882;CGK;KNO"
+  ],
+  "passengers": {
+    "adults": [
+      "ADT;MR;fitra;alfiananto;04\/19\/1990;3524221904900003;::085648889293;::085648889293;;;;fitra@gmail.com;1;ID;ID;;;ID;",
+      "ADT;MRS;dyah;arum;08\/18\/1990;3515175808910002;::08563332583;::08563332583;;;;dyah@gmail.com;1;ID;ID;;;ID;"
+    ],
+    "children": [
+      
+    ],
+    "infants": [
+      
+    ]
+  },
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2ODEyODUwMzMsIm5iZiI6MTY4MTI4NTA5MywiZXhwIjoxNjgxMjg4NjMzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9._Hs4WZN9ZHOF4Ks12AeZDCn10CFKyEThSzblG1BH7qs"
+}
+RESPONSE:
+{
+    "data": {
+        "passengers": "ADT;MR;fitra alfiananto ;3524221904900003|ADT;MRS;dyah arum ;3515175808910002|",
+        "details": "QXXISA;2023-04-12;13-Apr-2023 15:12;-|#ADT;MR;fitra alfiananto ;3524221904900003|ADT;MRS;dyah arum ;3515175808910002|#02-Mei-2023;ID6589;05:00;06:25;BOOKED;SUB;CGK|02-Mei-2023;ID6882;08:00;10:20;BOOKED;CGK;KNO|#4563560;;4670160;4563560|#;lion",
+        "bookingCode": "QXXISA",
+        "paymentCode": "",
+        "flightCode1": "ID6589",
+        "flightCode2": "ID6882",
+        "departureTime1": "05:00",
+        "departureTime2": "08:00",
+        "arrivalTime1": "06:25",
+        "arrivalTime2": "10:20",
+        "reservationDate": "12-Apr-2023",
+        "timeLimit": "13-Apr-2023 14:57",
+        "timeLimitYMD": "2023-04-13 14:57",
+        "flightInfoGo": "2023-05-02",
+        "nominal": "4670160",
+        "comission": "69731",
+        "nominalAdmin": "0",
+        "transactionId": "60506004",
+        "komisi": 69731
+    },
+    "rc": "00",
+    "rd": "Sukses",
+    "mid": "1681287125454927067",
+    "invoking": "Book Flight",
+    "processingTime": "28.32816696167 Second"
+}
+
+████ payment ████
+[POST] https://rajabiller.fastpay.co.id/travel/flight/payment
+REQUEST:
+{
+  "airline": "TPJT",
+  "transactionId": "60506004",
+  "bookingCode": "QXXISA",
+  "paymentCode": "",
+  "simulateSuccess": "yes",
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2ODEyODUwMzMsIm5iZiI6MTY4MTI4NTA5MywiZXhwIjoxNjgxMjg4NjMzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9._Hs4WZN9ZHOF4Ks12AeZDCn10CFKyEThSzblG1BH7qs"
+}
+RESPONSE:
+{
+    "data": {
+        "transaction_id": "2673923843",
+        "url_etiket": "https://rajabiller.fastpay.co.id/travel/app/generate_etiket?id_transaksi=2673923843",
+        "url_image": "https://rajabiller.fastpay.co.id/travel/app/generate_image_etiket?id_transaksi=2673923843",
+        "url_struk": "https://rajabiller.fastpay.co.id/travel/app/generate_struk?id_transaksi=2673923843",
+        "komisi": null,
+        "nominal": "1547526"
+    },
+    "rc": "00",
+    "rd": "Simulate Success",
+    "mid": null,
+    "invoking": "Payment Flight",
+    "processingTime": "0.030354022979736 Second"
+}
+
+████ booking list ████
+[POST] https://rajabiller.fastpay.co.id/travel/flight/booking_list
+REQUEST:
+{
+    "token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2ODEyODUwMzMsIm5iZiI6MTY4MTI4NTA5MywiZXhwIjoxNjgxMjg4NjMzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9._Hs4WZN9ZHOF4Ks12AeZDCn10CFKyEThSzblG1BH7qs"
+}
+RESPONSE:
+{
+    "data": [
+        ""
+    ],
+    "rc": "00",
+    "rd": "Success",
+    "mid": "1681359838983010837",
+    "invoking": "Booking List Flight",
+    "processingTime": "1.007838010788 Second"
+}
+
+████ booking info ████
+[POST] https://rajabiller.fastpay.co.id/travel/flight/booking_info
+REQUEST:
+{
+    "airline" : "TPJT",
+    "departure" : "SUB",
+    "arrival" : "KNO",
+    "transactionId" : 60506004,
+    "token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2ODEyODUwMzMsIm5iZiI6MTY4MTI4NTA5MywiZXhwIjoxNjgxMjg4NjMzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9._Hs4WZN9ZHOF4Ks12AeZDCn10CFKyEThSzblG1BH7qs"
+}
+RESPONSE:
+{
+    "data": {
+        "departureDate": "02-Mei-2023",
+        "departure": "SUB",
+        "arrival": "KNO",
+        "bookingCode": "QXXISA",
+        "paymentCode": "",
+        "reservationDate": "12-Apr-2023",
+        "timeLimit": "13-Apr-2023 14:57",
+        "flightCode": "ID6589",
+        "departureTime": "05:00",
+        "arrivalTime": "06:25",
+        "message": "60506004;20230412151205;QXXISA;ADT:MR:fitra:alfiananto:04/19/1990:3524221904900003:::085648889293:::085648889293::::fitra@gmail.com:1:ID:ID:::ID:;02-Mei-2023;12-Apr-2023;TPJT;4;4670160;0;SUB;KNO;2;0;0;1;13-Apr-2023 14:57;;2023-05-02;;ID6589;05:00;06:25;;;4670160;0;4563560;4563560;;ADT:MR:fitra:alfiananto:04/19/1990:3524221904900003:::085648889293:::085648889293::::fitra@gmail.com:1:ID:ID:::ID:#ADT:MRS:dyah:arum:08/18/1990:3515175808910002:::08563332583:::08563332583::::dyah@gmail.com:1:ID:ID:::ID:;;CGK;ID6882;;;08:00;10:20;;;0;;;ADT;MR;fitra;alfiananto;04/19/1990;3524221904900003;::085648889293;::085648889293;;;;fitra@gmail.com;1;ID;ID;;;ID;|||ADT;MRS;dyah;arum;08/18/1990;3515175808910002;::08563332583;::08563332583;;;;dyah@gmail.com;1;ID;ID;;;ID;;;;;;;02-Mei-2023;;;;|",
+        "paxPaid": "4670160"
+    },
+    "rc": "00",
+    "rd": "Success",
+    "mid": "1681357244751014917",
+    "invoking": "Booking Info Flight",
+    "processingTime": "0.058917045593262 Second"
+}

@@ -19,11 +19,17 @@ class PricingService
     // bisa di-override via env tanpa edit kode.
     private float $defaultMarkupPercent;
     private float $taxPercent;
+    private bool  $taxEnabled;
 
     public function __construct()
     {
         $this->defaultMarkupPercent = (float) config('ota.markup_percent', 12) / 100;
-        $this->taxPercent           = (float) config('ota.tax_percent', 11) / 100;
+
+        // PPN dibaca dari setting superadmin (toggle on/off + persen).
+        // Fallback ke config ota.tax_percent kalau cache kosong.
+        $ppn              = \App\Http\Controllers\Admin\SettingController::ppnTax();
+        $this->taxEnabled = (bool) $ppn['enabled'];
+        $this->taxPercent = (float) $ppn['percent'] / 100;
     }
 
     /**
@@ -118,8 +124,10 @@ class PricingService
             $subtotal -= $loyaltyDiscount;
         }
 
-        // 6. Pajak PPN
-        $taxAmount = round($subtotal * $this->taxPercent, 2);
+        // 6. Pajak PPN — hanya kalau di-enable superadmin
+        $taxAmount = $this->taxEnabled
+            ? round($subtotal * $this->taxPercent, 2)
+            : 0.0;
 
         // 7. Random 3-digit suffix (001–999) untuk transfer unik
         $priceSuffix = random_int(1, 999);

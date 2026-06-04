@@ -113,4 +113,19 @@ return [
         'name' => env('MAIL_FROM_NAME', 'Example'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Global "Reply-To" Address
+    |--------------------------------------------------------------------------
+    |
+    | Saat user klik "Reply" di email client, tujuan otomatis ke address ini
+    | (bukan address From). Untuk noreply@arahinn.com, set Reply-To ke
+    | help@arahinn.com supaya reply customer masuk ke CS team.
+    |
+    */
+    'reply_to' => [
+        'address' => env('MAIL_REPLY_TO_ADDRESS', 'help@arahinn.com'),
+        'name'    => env('MAIL_REPLY_TO_NAME', 'ArahInn Support'),
+    ],
+
 ];

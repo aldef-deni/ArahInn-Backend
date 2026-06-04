@@ -171,6 +171,150 @@ class SocialAuthController extends Controller
         ]);
     }
 
+    /**
+     * Native Sign in with Apple dari mobile app iOS.
+     *
+     * Flow:
+     *   1. Mobile pakai expo-apple-authentication → user approve via Face ID/Touch ID
+     *      → SDK return identityToken (JWT signed by Apple)
+     *   2. Mobile POST identity_token + (opsional) email + fullName ke endpoint ini
+     *   3. Backend verify JWT signature via Apple JWKS, pastikan:
+     *        - iss = https://appleid.apple.com
+     *        - aud = bundle id (com.arahinn.mobile)
+     *        - exp not expired
+     *   4. Find-or-create user (sub = stable Apple user ID, email cuma dikasih sekali di first login)
+     *   5. Return Sanctum personal access token
+     *
+     * Body:
+     *   identity_token : string (required) — JWT dari Apple
+     *   email          : string (optional) — Apple cuma kasih di FIRST sign-in
+     *   full_name      : string (optional) — Apple cuma kasih di FIRST sign-in
+     */
+    public function mobileApple(Request $request)
+    {
+        $request->validate([
+            'identity_token' => 'required|string',
+        ]);
+
+        $idToken     = $request->input('identity_token');
+        $expectedAud = config('services.apple.bundle_id', 'com.arahinn.mobile');
+
+        try {
+            // Fetch Apple's public keys (JWKS) - cache 1 jam karena rotate jarang
+            $jwks = cache()->remember('apple_jwks', 3600, function () {
+                $resp = \Illuminate\Support\Facades\Http::timeout(10)
+                    ->get('https://appleid.apple.com/auth/keys');
+                if (!$resp->successful()) {
+                    throw new \RuntimeException('Cannot fetch Apple JWKS');
+                }
+                return $resp->json();
+            });
+
+            // Verify + decode JWT
+            $payload = \Firebase\JWT\JWT::decode(
+                $idToken,
+                \Firebase\JWT\JWK::parseKeySet($jwks)
+            );
+
+            // Validate claims
+            if (($payload->iss ?? null) !== 'https://appleid.apple.com') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Token Apple issuer tidak valid.',
+                ], 401);
+            }
+
+            if (($payload->aud ?? null) !== $expectedAud) {
+                logger()->warning('Apple ID token aud mismatch', [
+                    'expected' => $expectedAud,
+                    'got'      => $payload->aud ?? null,
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Token Apple bukan untuk aplikasi ini.',
+                ], 401);
+            }
+
+            if (isset($payload->exp) && (int) $payload->exp < time()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Token Apple sudah kedaluwarsa.',
+                ], 401);
+            }
+
+            $sub   = $payload->sub   ?? null;  // Apple user ID (stable)
+            $email = $payload->email ?? $request->input('email');
+
+            if (!$sub) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Token Apple tidak memuat user ID.',
+                ], 401);
+            }
+
+        } catch (\Throwable $e) {
+            logger()->error('Apple ID token verification exception', ['error' => $e->getMessage()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal memverifikasi token Apple.',
+            ], 500);
+        }
+
+        // Find-or-create user (sub = stable, email mungkin null on subsequent login)
+        $user = User::where('oauth_provider', 'apple')
+                    ->where('oauth_id', $sub)
+                    ->first();
+
+        if (!$user) {
+            // First login attempt — email harus ada (Apple kasih sekali)
+            if ($email) {
+                $user = User::where('email', $email)->first();
+            }
+
+            if ($user) {
+                $user->update([
+                    'oauth_provider' => 'apple',
+                    'oauth_id'       => $sub,
+                ]);
+            } else {
+                if (!$email) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Email Apple tidak tersedia. Hapus app dari Settings → Apple ID → Sign in with Apple, lalu coba lagi.',
+                    ], 422);
+                }
+                $name = $request->input('full_name')
+                        ?: $request->input('name')
+                        ?: explode('@', $email)[0];
+
+                $user = User::create([
+                    'name'           => $name,
+                    'email'          => $email,
+                    'avatar'         => null,
+                    'oauth_provider' => 'apple',
+                    'oauth_id'       => $sub,
+                    'password'       => null,
+                ]);
+                $user->assignRole('user');
+            }
+        }
+
+        $token = $user->createToken('mobile-apple')->plainTextToken;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'token' => $token,
+                'user'  => [
+                    'id'    => $user->id,
+                    'name'  => $user->name,
+                    'email' => $user->email,
+                    'avatar'=> $user->avatar,
+                ],
+            ],
+        ]);
+    }
+
     public function redirectFacebook(Request $request)
     {
         $driver = Socialite::driver('facebook')->stateless();

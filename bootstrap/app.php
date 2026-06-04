@@ -25,10 +25,11 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->alias([
-            'role'       => \Spatie\Permission\Middleware\RoleMiddleware::class,
-            'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
-            'antifraud'  => \App\Http\Middleware\AntiFraud::class,
-            'auth'       => \App\Http\Middleware\Authenticate::class,
+            'role'                  => \Spatie\Permission\Middleware\RoleMiddleware::class,
+            'permission'            => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+            'antifraud'             => \App\Http\Middleware\AntiFraud::class,
+            'auth'                  => \App\Http\Middleware\Authenticate::class,
+            'rajabiller.whitelist'  => \App\Http\Middleware\RajabillerIpWhitelist::class,
         ]);
 
         $middleware->api(prepend: [

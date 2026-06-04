@@ -31,6 +31,9 @@ use App\Http\Controllers\OwnerDashboardController;
 use App\Http\Controllers\InteriorInquiryController;
 use App\Http\Controllers\InteriorDesignController;
 use App\Http\Controllers\PpobController;
+use App\Http\Controllers\PpobCallbackController;
+use App\Http\Controllers\XasController;
+use App\Http\Controllers\AnalyticsController;
 
 /*
 |--------------------------------------------------------------------------
@@ -47,6 +50,12 @@ Route::get('/health', fn() => response()->json([
     'timestamp' => now()->toISOString(),
 ]));
 
+// ── Maintenance Status (Public) ──────────────────────
+Route::get('/maintenance/status', fn() => response()->json([
+    'success' => true,
+    'data'    => \App\Http\Controllers\Admin\SettingController::maintenanceMode(),
+]));
+
 // ── Auth (Public) ─────────────────────────────────────
 Route::prefix('auth')->group(function () {
     Route::post('/register',       [AuthController::class, 'register']);
@@ -61,6 +70,9 @@ Route::prefix('auth')->group(function () {
     Route::get('/google/callback', [SocialAuthController::class, 'callbackGoogle']);
     // Mobile native Google Sign-In — verify ID token, return auth token
     Route::post('/google/mobile',  [SocialAuthController::class, 'mobileGoogle']);
+
+    // Mobile native Sign in with Apple — verify identity token, return auth token
+    Route::post('/apple/mobile',   [SocialAuthController::class, 'mobileApple']);
 
     // OAuth Facebook
     Route::get('/facebook',          [SocialAuthController::class, 'redirectFacebook']);
@@ -117,11 +129,31 @@ Route::post('/interior-inquiries', [InteriorInquiryController::class, 'store']);
 // ── Payment Webhooks (Public — no auth) ──────────────
 Route::post('/payments/webhook/doku', [PaymentController::class, 'webhookDoku']);
 
+// ── Payment mode info (Public) ───────────────────────
+Route::get('/payments/mode', [PaymentController::class, 'mode']);
+
 // ── PPOB (Public catalog) ─────────────────────────────
 Route::prefix('ppob')->group(function () {
     Route::get('/categories', [PpobController::class, 'categories']);
     Route::get('/products',   [PpobController::class, 'products']);
 });
+
+// ── Travel KERETA (Rajabiller API langsung) ───────────
+// Public read-only: cari jadwal, stasiun, denah kursi (tanpa uang).
+Route::prefix('travel/train')->group(function () {
+    Route::get('/stations',  [\App\Http\Controllers\TravelController::class, 'stations']);
+    Route::post('/search',   [\App\Http\Controllers\TravelController::class, 'search']);
+    Route::post('/seat-layout', [\App\Http\Controllers\TravelController::class, 'seatLayout']);
+});
+
+// ── PPOB Callback dari Rajabiller (IP whitelisted, public) ─────────
+Route::prefix('ppob/callback/rajabiller')->middleware('rajabiller.whitelist')->group(function () {
+    Route::post('/transaction',  [PpobCallbackController::class, 'transaction']);
+    Route::post('/product-info', [PpobCallbackController::class, 'productInfo']);
+});
+
+// ── XAS Travel Callback (Public, validated via token_mitra header) ──
+Route::post('/xas/callback', [XasController::class, 'callback']);
 
 // =====================================================
 // AUTHENTICATED ROUTES
@@ -209,6 +241,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('payments')->group(function () {
         Route::post('/initiate',     [PaymentController::class, 'initiate']);
         Route::get('/{bookingId}/status', [PaymentController::class, 'status']);
+        // Manual transfer mode: customer upload bukti transfer
+        Route::post('/{bookingId}/upload-proof', [PaymentController::class, 'uploadProof']);
+        // Admin: konfirmasi manual transfer setelah cek mutasi rekening
+        Route::post('/{bookingId}/confirm-manual', [PaymentController::class, 'confirmManual'])
+            ->middleware('role:superadmin|admin|finance');
         Route::get('/', [PaymentController::class, 'index'])
             ->middleware('role:superadmin|admin|finance');
     });
@@ -335,6 +372,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/revenue',     [ReportController::class, 'revenue']);
         Route::get('/reports/bookings',    [ReportController::class, 'bookings']);
         Route::get('/reports/canceled',    [ReportController::class, 'canceled']);
+
+        // Analytics (overview/users/bookings/top-hotels)
+        Route::get('/analytics/overview',   [AnalyticsController::class, 'overview']);
+        Route::get('/analytics/users',      [AnalyticsController::class, 'users']);
+        Route::get('/analytics/bookings',   [AnalyticsController::class, 'bookings']);
+        Route::get('/analytics/top-hotels', [AnalyticsController::class, 'topHotels']);
         Route::get('/logs',                [DashboardController::class, 'logs'])
             ->middleware('role:superadmin');
         // Finance can read hotels list (for report filters)
@@ -361,6 +404,28 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('role:superadmin');
         Route::post('/settings/payment-gateways', [SettingController::class, 'setGateway'])
             ->middleware('role:superadmin');
+
+        // Manual bank settings (rekening pembayaran transfer manual)
+        Route::get('/settings/payment-mode',     [SettingController::class, 'getPaymentMode'])
+            ->middleware('role:superadmin');
+        Route::post('/settings/payment-mode',    [SettingController::class, 'setPaymentMode'])
+            ->middleware('role:superadmin');
+        Route::get('/settings/payment-manual',   [SettingController::class, 'getPaymentManual'])
+            ->middleware('role:superadmin');
+        Route::post('/settings/payment-manual',  [SettingController::class, 'setPaymentManual'])
+            ->middleware('role:superadmin');
+
+        // Maintenance mode (superadmin only)
+        Route::get('/settings/maintenance',  [SettingController::class, 'getMaintenanceMode'])
+            ->middleware('role:superadmin');
+        Route::post('/settings/maintenance', [SettingController::class, 'setMaintenanceMode'])
+            ->middleware('role:superadmin');
+
+        // PPN tax toggle (superadmin only)
+        Route::get('/settings/ppn-tax',  [SettingController::class, 'getPpnTax'])
+            ->middleware('role:superadmin');
+        Route::post('/settings/ppn-tax', [SettingController::class, 'setPpnTax'])
+            ->middleware('role:superadmin');
     });
 
     // ── Interior Designs ─────────────────────────────────────────────
@@ -379,20 +444,36 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{id}/status',[InteriorInquiryController::class, 'updateStatus']);
     });
 
-    // ── PPOB (authenticated) ─────────────────────────────────────────
+    // ── XAS Travel (authenticated user) ──────────────────────────────
+    // Customer request credential untuk embed Travel webview (pesawat/kereta/dlu/pelni)
+    Route::post('/xas/credential', [XasController::class, 'createCredential']);
+
+    // ── PPOB (authenticated user) ────────────────────────────────────
     Route::prefix('ppob')->group(function () {
-        Route::post('/inquiry',         [PpobController::class, 'inquiry']);
-        Route::post('/transactions',    [PpobController::class, 'store']);
-        Route::get('/my-transactions',  [PpobController::class, 'myTransactions']);
-        Route::get('/transactions/{trxCode}', [PpobController::class, 'show']);
+        Route::post('/purchase',                    [PpobController::class, 'purchase']);
+        Route::post('/inquiry',                     [PpobController::class, 'inquiry']);
+        Route::post('/transactions/{trxCode}/confirm-pay', [PpobController::class, 'confirmPay']);
+        Route::get('/my-transactions',              [PpobController::class, 'myTransactions']);
+        Route::get('/transactions/{trxCode}',       [PpobController::class, 'show']);
+    });
+
+    // ── Travel KERETA (authenticated: booking flow) ──────────────────
+    Route::prefix('travel/train')->group(function () {
+        Route::post('/book',         [\App\Http\Controllers\TravelController::class, 'book']);
+        Route::post('/change-seat',  [\App\Http\Controllers\TravelController::class, 'changeSeat']);
+        Route::post('/cancel',       [\App\Http\Controllers\TravelController::class, 'cancel']);
+        Route::get('/status/{bookCode}', [\App\Http\Controllers\TravelController::class, 'status']);
     });
 
     Route::prefix('admin/ppob')->middleware('role:superadmin|admin|finance')->group(function () {
-        Route::get('/transactions',                 [PpobController::class, 'adminIndex']);
-        Route::post('/transactions/{trxCode}/refund', [PpobController::class, 'adminRefund'])->middleware('role:superadmin|admin|finance');
-        Route::post('/transactions/{trxCode}/retry',  [PpobController::class, 'adminRetry'])->middleware('role:superadmin|admin');
-        Route::get('/balance',                      [PpobController::class, 'adminBalance']);
-        Route::get('/categories',                   [PpobController::class, 'adminCategories']);
-        Route::put('/categories/{id}',              [PpobController::class, 'adminUpdateCategory'])->middleware('role:superadmin|admin');
+        Route::get('/transactions',                            [PpobController::class, 'adminIndex']);
+        Route::post('/transactions/{trxCode}/mark-paid',       [PpobController::class, 'adminMarkPaid']);
+        Route::post('/transactions/{trxCode}/cancel',          [PpobController::class, 'adminCancel']);
+        Route::post('/transactions/{trxCode}/refund',          [PpobController::class, 'adminRefund']);
+        Route::post('/transactions/{trxCode}/retry',           [PpobController::class, 'adminRetry']);
+        Route::get('/balance',                                 [PpobController::class, 'adminBalance']);
+        Route::get('/categories',                              [PpobController::class, 'adminCategories']);
+        Route::put('/categories/{id}',                         [PpobController::class, 'adminUpdateCategory'])->middleware('role:superadmin|admin');
+        Route::post('/sync-catalog',                           [PpobController::class, 'adminSyncCatalog'])->middleware('role:superadmin');
     });
 });
