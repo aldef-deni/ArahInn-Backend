@@ -166,6 +166,25 @@ class PpobController extends Controller
     }
 
     /**
+     * GET /api/v1/ppob/transactions/{trxCode}/receipt
+     * Stream PDF e-struk untuk di-download.
+     */
+    public function downloadReceipt(string $trxCode, Request $request)
+    {
+        $trx  = PpobTransaction::where('trx_code', $trxCode)->firstOrFail();
+        $user = $request->user();
+        if ((int) $trx->user_id !== (int) $user->id && !$user->hasRole(['superadmin', 'admin', 'finance'])) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
+        }
+        if ($trx->status !== 'success') {
+            return response()->json(['success' => false, 'message' => 'Struk tersedia untuk transaksi yang berhasil.'], 400);
+        }
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.ppob-receipt', \App\Mail\PpobSuccessMail::payload($trx))
+            ->setPaper('a4', 'portrait');
+        return $pdf->download("E-Struk-{$trx->trx_code}.pdf");
+    }
+
+    /**
      * GET /api/v1/ppob/my-transactions
      */
     public function myTransactions(Request $request)

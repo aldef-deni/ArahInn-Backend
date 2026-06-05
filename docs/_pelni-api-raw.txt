@@ -1,0 +1,318 @@
+
+████ origin ████
+[POST] https://rajabiller.fastpay.co.id/travel/pelni/get_origin
+REQUEST:
+{
+    "token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2ODEyODUwMzMsIm5iZiI6MTY4MTI4NTA5MywiZXhwIjoxNjgxMjg4NjMzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9._Hs4WZN9ZHOF4Ks12AeZDCn10CFKyEThSzblG1BH7qs"
+}
+RESPONSE:
+{
+    "data": [
+        {
+            "CODE": "948",
+            "NAME": "AGATS"
+        },
+        {
+            "CODE": "952",
+            "NAME": "AMAHAI"
+        },
+        {
+            "CODE": "946",
+            "NAME": "AMBON"
+        },
+        {
+            "CODE": "651",
+            "NAME": "AMPENAN (LEMBAR)"
+        },
+        {
+            "CODE": "920",
+            "NAME": "AMURANG"
+        },
+        {
+            "CODE": "891",
+            "NAME": "AWERANGE"
+        },
+        {
+            "CODE": "925",
+            "NAME": "BABANG (BACAN)"
+        },
+        {
+            "CODE": "661",
+            "NAME": "BADAS"
+        },
+        {
+            "CODE": "803",
+            "NAME": "BALIKPAPAN"
+        },
+        {
+            "CODE": "947",
+            "NAME": "BANDA NAIRA"
+        },
+        {
+            "CODE": "908",
+            "NAME": "BANGGAI"
+        },
+        {
+            "CODE": "256",
+            "NAME": "BATU AMPAR (BATAM)"
+        },
+        {
+            "CODE": "773",
+            "NAME": "BATULICIN"
+        },
+        {
+            "CODE": "921",
+            "NAME": "BAU-BAU"
+        },
+        {
+            "CODE": "144",
+            "NAME": "BELAWAN (MEDAN)"
+        },
+        {
+            "CODE": "322",
+            "NAME": "BELINYU"
+        }
+
+████ destination ████
+[POST] https://rajabiller.fastpay.co.id/travel/pelni/get_destination
+REQUEST:
+{
+    "token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2ODEyODUwMzMsIm5iZiI6MTY4MTI4NTA5MywiZXhwIjoxNjgxMjg4NjMzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9._Hs4WZN9ZHOF4Ks12AeZDCn10CFKyEThSzblG1BH7qs"
+}
+RESPONSE:
+{
+    "data": [
+        {
+            "CODE": "948",
+            "NAME": "AGATS"
+        },
+        {
+            "CODE": "952",
+            "NAME": "AMAHAI"
+        },
+        {
+            "CODE": "946",
+            "NAME": "AMBON"
+        },
+        {
+            "CODE": "651",
+            "NAME": "AMPENAN (LEMBAR)"
+        },
+        {
+            "CODE": "920",
+            "NAME": "AMURANG"
+        },
+        {
+            "CODE": "891",
+            "NAME": "AWERANGE"
+        },
+        {
+            "CODE": "925",
+            "NAME": "BABANG (BACAN)"
+        },
+        {
+            "CODE": "661",
+            "NAME": "BADAS"
+        },
+        {
+            "CODE": "803",
+            "NAME": "BALIKPAPAN"
+        },
+        {
+            "CODE": "947",
+            "NAME": "BANDA NAIRA"
+        },
+        {
+            "CODE": "908",
+            "NAME": "BANGGAI"
+        },
+        {
+            "CODE": "256",
+            "NAME": "BATU AMPAR (BATAM)"
+        },
+        {
+            "CODE": "773",
+            "NAME": "BATULICIN"
+        },
+        {
+            "CODE": "921",
+            "NAME": "BAU-BAU"
+        },
+        {
+            "CODE": "144",
+            "NAME": "BELAWAN (MEDAN)"
+        },
+        {
+            "CODE": "322",
+            "NAME": "BELINYU"
+        }
+
+████ search ████
+[POST] https://rajabiller.fastpay.co.id/travel/pelni/search
+REQUEST:
+{
+    "origin" : 563,
+    "destination" : 431,
+    "startDate" : "2023-05-10",
+    "endDate" : "2023-05-20",
+    "token" : "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2ODEyODUwMzMsIm5iZiI6MTY4MTI4NTA5MywiZXhwIjoxNjgxMjg4NjMzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9._Hs4WZN9ZHOF4Ks12AeZDCn10CFKyEThSzblG1BH7qs"
+}
+RESPONSE:
+{
+    "data": [
+        {
+            "fares": [
+                {
+                    "SUBCLASS": "A",
+                    "CLASS": "EK1",
+                    "AVAILABILITY": {
+                        "F": "0",
+                        "M": "0"
+                    },
+                    "FARE_DETAIL": {
+                        "A": {
+                            "TOTAL": 661000,
+                            "ARV_PORT_TRANSPORT_FEE": "0",
+                            "INSURANCE": "6000",
+                            "PORT_PASS": "15000",
+                            "DEP_PORT_TRANSPORT_FEE": "0",
+                            "FARE": "640000"
+                        },
+                        "I": {
+                            "TOTAL": 71000,
+                            "ARV_PORT_TRANSPORT_FEE": "0",
+                            "INSURANCE": "6000",
+                            "PORT_PASS": "0",
+                            "DEP_PORT_TRANSPORT_FEE": "0",
+                            "FARE": "65000"
+                        },
+                        "C": {
+                            "PORT_PASS": "0",
+                            "ARV_PORT_TRANSPORT_FEE": "0",
+                            "INSURANCE": "0",
+                            "FARE": "0",
+                            "TOTAL": "0",
+      
+
+████ check_availability ████
+[POST] https://rajabiller.fastpay.co.id/travel/pelni/check_availability
+REQUEST:
+{
+  "origin": 563,
+  "originCall": 2,
+  "destination": 431,
+  "destinationCall": 2,
+  "departureDate": "20230504",
+  "shipNumber": "NP-114-A1B",
+  "subClass": "B",
+  "male": 1,
+  "female": 0,
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2ODEyODUwMzMsIm5iZiI6MTY4MTI4NTA5MywiZXhwIjoxNjgxMjg4NjMzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9._Hs4WZN9ZHOF4Ks12AeZDCn10CFKyEThSzblG1BH7qs"
+}
+RESPONSE:
+{
+    "data": {
+        "F": "0",
+        "M": "1"
+    },
+    "rc": "00",
+    "rd": "Success",
+    "mid": "1681368454967968897",
+    "invoking": "Check Availability Pelni",
+    "processingTime": "1.752984046936 Second"
+}
+
+████ booking ████
+[POST] https://rajabiller.fastpay.co.id/travel/pelni/book
+REQUEST:
+{
+  "harga_dewasa": "661000",
+  "harga_anak": "0",
+  "harga_infant": "0",
+  "pelabuhan_asal": "TANJUNG PERAK (SURABAYA)",
+  "pelabuhan_tujuan": "TANJUNG PRIOK (JAKARTA)",
+  "shipName": "KM.BUKIT RAYA",
+  "origin": 563,
+  "originCall": 2,
+  "destination": 431,
+  "destinationCall": 2,
+  "departureDate": "20230504",
+  "shipNumber": "NP-114-A1B",
+  "subClass": "E",
+  "male": 1,
+  "female": 0,
+  "adult": 1,
+  "child": 0,
+  "infant": 0,
+  "isFamily": "N",
+  "contact": {
+    "email": "uzumaki.unis@gmail.com",
+    "phone": "085655141006"
+  },
+  "passengers": {
+    "adults": [
+      {
+        "name": "Fitra Alfiananto",
+        "birthDate": "1990-04-19",
+        "identityNumber": "3524221904900003",
+        "gender": "M"
+      }
+    ],
+    "children": [
+      
+    ],
+    "infants": [
+      
+    ]
+  },
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2ODEyODUwMzMsIm5iZiI6MTY4MTI4NTA5MywiZXhwIjoxNjgxMjg4NjMzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9._Hs4WZN9ZHOF4Ks12AeZDCn10CFKyEThSzblG1BH7qs"
+}
+RESPONSE:
+{
+    "data": {
+        "nominal_admin": "10000",
+        "bookingCode": "",
+        "paymentCode": "8895045198",
+        "departureTime": "06:00",
+        "arrivalDate": "2023-05-11",
+        "arrivalTime": "07:00",
+        "seats": [
+            [
+                "4",
+                "26",
+                "1"
+            ]
+        ],
+        "expiredAt": "20",
+        "normalSales": "661000",
+        "extraFee": "0",
+        "bookingBalance": "661000",
+        "discount": "0",
+        "payLimit": "2023-04-13 14:04:10",
+        "komisi": 7000,
+        "transactionId": "60994832"
+    },
+    "rc": "00",
+    "rd": "Success",
+    "mid": "1681368874426170037",
+    "invoking": "Book Pelni",
+    "processingTime": "1.2909679412842 Second"
+}
+
+████ payment ████
+[POST] https://rajabiller.fastpay.co.id/travel/pelni/payment
+REQUEST:
+{
+  "paymentCode": "8895045198",
+  "transactionId": "60994832",
+  "simulateSuccess": "yes",
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImp0aSI6IjhkNzNtbmc4OWVkIn0.eyJpc3MiOiJodHRwczpcL1wvdHJhdmVsLnJhamFiaWxsZXIuY29tIiwiYXVkIjoiUmFqYWJpbGxlciBUcmF2ZWwgQXBpIiwianRpIjoiOGQ3M21uZzg5ZWQiLCJpYXQiOjE2ODEyODUwMzMsIm5iZiI6MTY4MTI4NTA5MywiZXhwIjoxNjgxMjg4NjMzLCJvdXRsZXRJZCI6IlNQMzAwMjAzIiwicGluIjoiODkzNDU2Iiwia2V5IjoiRkFTVFBBWSJ9._Hs4WZN9ZHOF4Ks12AeZDCn10CFKyEThSzblG1BH7qs"
+}
+RESPONSE:
+{
+    "rc": "06",
+    "rd": "SALDO ANDA TIDAK MENCUKUPI",
+    "mid": "1681369512962750227",
+    "invoking": "Payment Pelni",
+    "processingTime": "0.88024401664734 Second"
+}

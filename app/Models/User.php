@@ -14,7 +14,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'name', 'email', 'password', 'phone', 'avatar',
-        'oauth_provider', 'oauth_id', 'is_active',
+        'oauth_provider', 'oauth_id', 'is_active', 'primary_role',
     ];
 
     protected $hidden = ['password', 'remember_token'];
@@ -25,7 +25,7 @@ class User extends Authenticatable
         'is_active'         => 'boolean',
     ];
 
-    protected $attributes = ['is_active' => true];
+    protected $attributes = ['is_active' => true, 'primary_role' => 'user'];
 
     // ── Relations ─────────────────────────────────────
     public function hotels()      { return $this->hasMany(Hotel::class, 'owner_id'); }

@@ -138,12 +138,32 @@ Route::prefix('ppob')->group(function () {
     Route::get('/products',   [PpobController::class, 'products']);
 });
 
+// ── Travel settings (public: markup per pax) ──────────
+Route::get('/travel/settings', [\App\Http\Controllers\TravelController::class, 'settings']);
+
 // ── Travel KERETA (Rajabiller API langsung) ───────────
 // Public read-only: cari jadwal, stasiun, denah kursi (tanpa uang).
 Route::prefix('travel/train')->group(function () {
     Route::get('/stations',  [\App\Http\Controllers\TravelController::class, 'stations']);
     Route::post('/search',   [\App\Http\Controllers\TravelController::class, 'search']);
     Route::post('/seat-layout', [\App\Http\Controllers\TravelController::class, 'seatLayout']);
+});
+
+// ── Travel PESAWAT (public read-only: bandara, maskapai, cari, fare) ──
+Route::prefix('travel/flight')->group(function () {
+    Route::get('/airports',  [\App\Http\Controllers\TravelController::class, 'airports']);
+    Route::get('/airlines',  [\App\Http\Controllers\TravelController::class, 'airlines']);
+    Route::post('/search',     [\App\Http\Controllers\TravelController::class, 'searchFlight']);
+    Route::post('/search-all', [\App\Http\Controllers\TravelController::class, 'searchAllFlight']);
+    Route::post('/fare',       [\App\Http\Controllers\TravelController::class, 'flightFare']);
+});
+
+// ── Travel PELNI (public read-only: pelabuhan, cari, cek kuota) ────
+Route::prefix('travel/pelni')->group(function () {
+    Route::get('/origins',           [\App\Http\Controllers\TravelController::class, 'pelniOrigins']);
+    Route::get('/destinations',      [\App\Http\Controllers\TravelController::class, 'pelniDestinations']);
+    Route::post('/search',           [\App\Http\Controllers\TravelController::class, 'searchPelni']);
+    Route::post('/check-availability',[\App\Http\Controllers\TravelController::class, 'pelniCheckAvailability']);
 });
 
 // ── PPOB Callback dari Rajabiller (IP whitelisted, public) ─────────
@@ -426,6 +446,12 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('role:superadmin');
         Route::post('/settings/ppn-tax', [SettingController::class, 'setPpnTax'])
             ->middleware('role:superadmin');
+
+        // Markup travel (superadmin only)
+        Route::get('/settings/travel-markup',  [SettingController::class, 'getTravelMarkup'])
+            ->middleware('role:superadmin');
+        Route::post('/settings/travel-markup', [SettingController::class, 'setTravelMarkup'])
+            ->middleware('role:superadmin');
     });
 
     // ── Interior Designs ─────────────────────────────────────────────
@@ -455,6 +481,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/transactions/{trxCode}/confirm-pay', [PpobController::class, 'confirmPay']);
         Route::get('/my-transactions',              [PpobController::class, 'myTransactions']);
         Route::get('/transactions/{trxCode}',       [PpobController::class, 'show']);
+        Route::get('/transactions/{trxCode}/receipt', [PpobController::class, 'downloadReceipt']);
     });
 
     // ── Travel KERETA (authenticated: booking flow) ──────────────────
@@ -463,6 +490,20 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/change-seat',  [\App\Http\Controllers\TravelController::class, 'changeSeat']);
         Route::post('/cancel',       [\App\Http\Controllers\TravelController::class, 'cancel']);
         Route::get('/status/{bookCode}', [\App\Http\Controllers\TravelController::class, 'status']);
+    });
+
+    // ── Travel PESAWAT (authenticated: booking) ──────────────────────
+    Route::prefix('travel/flight')->group(function () {
+        Route::post('/book', [\App\Http\Controllers\TravelController::class, 'bookFlight']);
+    });
+
+    // ── Travel BOOKING + PAYMENT (checkout → pay → e-tiket) ───────────
+    Route::prefix('travel')->group(function () {
+        Route::post('/checkout',           [\App\Http\Controllers\TravelBookingController::class, 'checkout']);
+        Route::get('/bookings',            [\App\Http\Controllers\TravelBookingController::class, 'myBookings']);
+        Route::get('/bookings/{id}',       [\App\Http\Controllers\TravelBookingController::class, 'show']);
+        Route::post('/bookings/{id}/pay',  [\App\Http\Controllers\TravelBookingController::class, 'pay']);
+        Route::get('/bookings/{id}/etiket', [\App\Http\Controllers\TravelBookingController::class, 'downloadEtiket']);
     });
 
     Route::prefix('admin/ppob')->middleware('role:superadmin|admin|finance')->group(function () {

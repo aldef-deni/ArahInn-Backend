@@ -14,21 +14,37 @@ class UserManageController extends Controller
 
     public function store(Request $request)
     {
+        // Model AKUN TERPISAH: email sama boleh punya beberapa akun dgn role berbeda
+        // (mis. budi@mail.com bisa jadi customer DAN owner sebagai 2 akun terpisah).
+        // Yang dicegah hanya duplikat email untuk role yang SAMA.
         $data = $request->validate([
             'name'      => 'required|string|max:255',
-            'email'     => 'required|email|unique:users,email',
+            'email'     => 'required|email',
             'password'  => 'required|min:6',
             'phone'     => 'nullable|string',
             'role'      => 'required|in:' . implode(',', self::ROLES),
             'is_active' => 'boolean',
         ]);
 
+        $primaryRole = $data['role'];
+
+        // Cegah 2 akun dengan email + role yang sama persis.
+        $dup = User::where('email', $data['email'])->where('primary_role', $primaryRole)->first();
+        if ($dup) {
+            return response()->json([
+                'success' => false,
+                'message' => "Sudah ada akun dengan email ini untuk role {$primaryRole}.",
+                'errors'  => ['email' => ["Email sudah dipakai untuk akun {$primaryRole}."]],
+            ], 422);
+        }
+
         $user = User::create([
-            'name'      => $data['name'],
-            'email'     => $data['email'],
-            'password'  => Hash::make($data['password']),
-            'phone'     => $data['phone'] ?? null,
-            'is_active' => $data['is_active'] ?? true,
+            'name'         => $data['name'],
+            'email'        => $data['email'],
+            'password'     => Hash::make($data['password']),
+            'phone'        => $data['phone'] ?? null,
+            'is_active'    => $data['is_active'] ?? true,
+            'primary_role' => $primaryRole,
         ]);
 
         $user->assignRole($data['role']);
@@ -36,7 +52,7 @@ class UserManageController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Pengguna berhasil ditambahkan.',
+            'message' => 'Akun ' . $primaryRole . ' berhasil dibuat.',
             'data'    => $user->load('roles'),
         ], 201);
     }

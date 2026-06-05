@@ -107,51 +107,26 @@ class AuthController extends Controller
      */
     private function upsertUserWithRole(array $data, string $role, Request $request): array
     {
-        $existing = User::where('email', $data['email'])->first();
-
-        // Email belum terdaftar → user baru
-        if (!$existing) {
-            $user = User::create($data);
-            $user->assignRole($role);
-            return ['user' => $user, 'isNew' => true];
-        }
-
-        // Email sudah ada → verifikasi password supaya hanya pemilik akun
-        // yang bisa menambah role baru. Mencegah orang lain "claim" email.
-        if (!\Hash::check($data['password'], $existing->password)) {
-            return [
-                'error' => [
-                    'success' => false,
-                    'error'   => 'email_exists_password_mismatch',
-                    'message' => 'Email ini sudah terdaftar di Arahinn. Untuk menambahkan role baru, gunakan password yang sama dengan akun Anda. Lupa password? Reset dulu via halaman login.',
-                ],
-                'status' => 422,
-            ];
-        }
-
-        // Cek apakah role sudah dimiliki
-        if ($existing->hasRole($role)) {
+        // Model AKUN TERPISAH (per keputusan 2026-06-04): email sama boleh punya
+        // akun customer DAN akun owner terpisah. Tidak menambah role ke akun existing.
+        // Yang dicegah hanya duplikat email + role yang SAMA.
+        $dup = User::where('email', $data['email'])->where('primary_role', $role)->first();
+        if ($dup) {
             return [
                 'error' => [
                     'success' => false,
                     'error'   => 'role_already_assigned',
-                    'message' => "Akun Anda sudah memiliki role {$role}. Silakan login langsung.",
+                    'message' => "Email ini sudah terdaftar sebagai {$role}. Silakan login langsung.",
                 ],
                 'status' => 422,
             ];
         }
 
-        // Append role baru ke user existing
-        $existing->assignRole($role);
+        // Buat akun BARU khusus role ini (terpisah dari akun customer bila ada).
+        $user = User::create($data + ['primary_role' => $role]);
+        $user->assignRole($role);
 
-        // Update name/phone kalau yang baru diisi & yang lama kosong
-        $patch = [];
-        if (!empty($data['name'])  && empty($existing->name))  $patch['name']  = $data['name'];
-        if (!empty($data['phone']) && empty($existing->phone)) $patch['phone'] = $data['phone'];
-        if (array_key_exists('is_active', $data) && !$existing->is_active) $patch['is_active'] = true;
-        if (!empty($patch)) $existing->update($patch);
-
-        return ['user' => $existing->fresh(), 'isNew' => false];
+        return ['user' => $user, 'isNew' => true];
     }
 
     // ── Login ─────────────────────────────────────────
@@ -160,19 +135,34 @@ class AuthController extends Controller
         $data = $request->validate([
             'email'    => 'required|email',
             'password' => 'required|string',
+            'portal'   => 'nullable|string', // 'owner' = login dari Extranet (pilih akun owner)
         ]);
 
-        // Bedakan: email tidak terdaftar vs password salah
-        $user = User::where('email', $data['email'])->first();
-        if (!$user) {
+        $isOwnerPortal = ($data['portal'] ?? null) === 'owner';
+
+        // Model akun terpisah: email sama bisa punya akun owner & customer terpisah.
+        // Portal extranet → cari akun primary_role='owner'. Default → akun non-owner.
+        $probe = User::where('email', $data['email']);
+        if ($isOwnerPortal) {
+            $probe->where('primary_role', 'owner');
+        }
+        if (!$probe->exists()) {
             return response()->json([
                 'success' => false,
                 'error'   => 'email_not_found',
-                'message' => 'Email belum terdaftar.',
+                'message' => $isOwnerPortal
+                    ? 'Belum ada akun pemilik (Extranet) untuk email ini.'
+                    : 'Email belum terdaftar.',
             ], 404);
         }
 
-        if (!Auth::attempt(['email' => $data['email'], 'password' => $data['password']])) {
+        // Auth::attempt: key selain 'password' jadi kondisi where → scope akun owner.
+        $creds = ['email' => $data['email'], 'password' => $data['password']];
+        if ($isOwnerPortal) {
+            $creds['primary_role'] = 'owner';
+        }
+
+        if (!Auth::attempt($creds)) {
             return response()->json([
                 'success' => false,
                 'error'   => 'wrong_password',

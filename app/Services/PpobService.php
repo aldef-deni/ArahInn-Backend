@@ -537,6 +537,16 @@ class PpobService
                 'struk_url' => $trx->struk_url,
             ]
         );
+
+        // Email + lampiran PDF e-struk (tidak boleh menggagalkan flow utama)
+        $email = optional($trx->user)->email;
+        if ($email) {
+            try {
+                \Illuminate\Support\Facades\Mail::to($email)->send(new \App\Mail\PpobSuccessMail($trx));
+            } catch (\Throwable $e) {
+                Log::error('PPOB e-struk email gagal', ['trx_code' => $trx->trx_code, 'error' => $e->getMessage()]);
+            }
+        }
     }
 
     private function notifyCustomerFailed(PpobTransaction $trx): void

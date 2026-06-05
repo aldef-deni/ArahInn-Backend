@@ -200,6 +200,313 @@ class TravelService
     }
 
     /* ──────────────────────────────────────────────────────────────────
+     * PESAWAT — FLOW (channel PRODUCTION)
+     * airport → configuration → search → fare → book → payment
+     * Doc: docs/rajabiller-travel-pesawat-api.md
+     * ────────────────────────────────────────────────────────────────── */
+
+    /** Daftar bandara. */
+    public function airports(): array
+    {
+        return $this->authed(self::CH_PROD, '/flight/airport', []);
+    }
+
+    /** Daftar maskapai (configuration). */
+    public function airlines(): array
+    {
+        return $this->authed(self::CH_PROD, '/flight/configuration', []);
+    }
+
+    /**
+     * Cari penerbangan.
+     * @param array $p { airline, departure, arrival, departureDate, returnDate?, adult, child, infant }
+     */
+    public function searchFlight(array $p): array
+    {
+        return $this->authed(self::CH_PROD, '/flight/search', [
+            'airline'        => $p['airline'],
+            'departure'      => $p['departure'],
+            'arrival'        => $p['arrival'],
+            'departureDate'  => $p['departureDate'],
+            'returnDate'     => $p['returnDate'] ?? '',
+            'isLowestPrice'  => $p['isLowestPrice'] ?? true,
+            'adult'          => (int) ($p['adult']  ?? 1),
+            'child'          => (int) ($p['child']  ?? 0),
+            'infant'         => (int) ($p['infant'] ?? 0),
+        ]);
+    }
+
+    /** Maskapai domestik default untuk search semua maskapai. */
+    public const AIRLINES = ['TPGA', 'TPQG', 'TPJT', 'TPIW', 'TPID', 'TPSJ', 'TPIN', 'TPQZ'];
+    public const AIRLINE_NAMES = [
+        'TPGA' => 'Garuda Indonesia', 'TPQG' => 'Citilink', 'TPJT' => 'Lion Air',
+        'TPIW' => 'Wings Air', 'TPID' => 'Batik Air', 'TPSJ' => 'Sriwijaya Air',
+        'TPIN' => 'NAM Air', 'TPQZ' => 'Indonesia AirAsia',
+    ];
+
+    /**
+     * Cari penerbangan dari SEMUA maskapai sekaligus (paralel via Http::pool).
+     * @param array $p { departure, arrival, departureDate, returnDate?, adult, child, infant }
+     * @return array { rc, flights: [ ...flight + airline + airlineName ] }
+     */
+    public function searchAllFlights(array $p): array
+    {
+        $token = $this->getToken(self::CH_PROD);
+        if (!$token) {
+            return ['rc' => 'CONFIG', 'flights' => []];
+        }
+        $baseUrl = $this->env[self::CH_PROD]['url'];
+        $payload = [
+            'departure'     => $p['departure'],
+            'arrival'       => $p['arrival'],
+            'departureDate' => $p['departureDate'],
+            'returnDate'    => $p['returnDate'] ?? '',
+            'isLowestPrice' => true,
+            'adult'         => (int) ($p['adult'] ?? 1),
+            'child'         => (int) ($p['child'] ?? 0),
+            'infant'        => (int) ($p['infant'] ?? 0),
+            'token'         => $token,
+        ];
+
+        $responses = Http::pool(fn ($pool) => array_map(
+            fn ($a) => $pool->as($a)->timeout($this->timeout)->acceptJson()->asJson()
+                ->post($baseUrl . '/flight/search', $payload + ['airline' => $a]),
+            self::AIRLINES
+        ));
+
+        $flights = [];
+        foreach (self::AIRLINES as $a) {
+            $resp = $responses[$a] ?? null;
+            try {
+                if (!$resp || !$resp->ok()) continue;
+                $data = $resp->json()['data'] ?? [];
+            } catch (\Throwable $e) { continue; }
+            if (!is_array($data)) continue;
+            foreach ($data as $fl) {
+                $fl['airline']     = $a;
+                $fl['airlineName'] = self::AIRLINE_NAMES[$a] ?? $a;
+                $flights[] = $fl;
+            }
+        }
+
+        return ['rc' => '00', 'flights' => $flights];
+    }
+
+    /**
+     * Konfirmasi harga (fare).
+     * @param array $p { airline, departure, arrival, departureDate, returnDate?, adult, child, infant, seats:[<seat string>] }
+     */
+    public function flightFare(array $p): array
+    {
+        return $this->authed(self::CH_PROD, '/flight/fare', [
+            'airline'       => $p['airline'],
+            'departure'     => $p['departure'],
+            'arrival'       => $p['arrival'],
+            'departureDate' => $p['departureDate'],
+            'returnDate'    => $p['returnDate'] ?? '',
+            'adult'         => (string) ($p['adult']  ?? 1),
+            'child'         => (int) ($p['child']  ?? 0),
+            'infant'        => (int) ($p['infant'] ?? 0),
+            'seats'         => $p['seats'],
+        ]);
+    }
+
+    /**
+     * Booking pesawat. Passenger di-encode jadi string delimited.
+     * @param array $p { airline, departure, arrival, departureDate, returnDate?, adult, child, infant,
+     *                   flights:[<seat string>],
+     *                   passengers:{ adults:[{title,firstName,lastName,birthdate,idNumber,phone,email}],
+     *                                children:[{...}], infants:[{title,firstName,lastName,birthdate,idNumber}] } }
+     */
+    public function bookFlight(array $p): array
+    {
+        $pax = $p['passengers'] ?? [];
+        return $this->authed(self::CH_PROD, '/flight/book', [
+            'airline'       => $p['airline'],
+            'departure'     => $p['departure'],
+            'arrival'       => $p['arrival'],
+            'departureDate' => $p['departureDate'],
+            'returnDate'    => $p['returnDate'] ?? '',
+            'adult'         => (string) ($p['adult']  ?? 1),
+            'child'         => (int) ($p['child']  ?? 0),
+            'infant'        => (int) ($p['infant'] ?? 0),
+            'flights'       => $p['flights'],
+            'passengers'    => [
+                'adults'   => array_map([self::class, 'encodeAdult'],  $pax['adults']   ?? []),
+                'children' => array_map([self::class, 'encodeChild'],  $pax['children'] ?? []),
+                'infants'  => array_map([self::class, 'encodeInfant'], $pax['infants']  ?? []),
+            ],
+        ]);
+    }
+
+    /**
+     * Bayar/issue pesawat.
+     * @param array $p { airline, transactionId, bookingCode, paymentCode?, simulate? }
+     */
+    public function payFlight(array $p): array
+    {
+        $payload = [
+            'airline'       => $p['airline'],
+            'transactionId' => $p['transactionId'],
+            'bookingCode'   => $p['bookingCode'],
+            'paymentCode'   => $p['paymentCode'] ?? '',
+        ];
+        // simulateSuccess=yes → mode simulasi (tidak potong saldo asli). Hapus untuk production asli.
+        if (!empty($p['simulate'])) {
+            $payload['simulateSuccess'] = 'yes';
+        }
+        return $this->authed(self::CH_PROD, '/flight/payment', $payload);
+    }
+
+    public function flightBookingInfo(string $airline, string $departure, string $arrival, string $transactionId): array
+    {
+        return $this->authed(self::CH_PROD, '/flight/booking_info', [
+            'airline'       => $airline,
+            'departure'     => $departure,
+            'arrival'       => $arrival,
+            'transactionId' => $transactionId,
+        ]);
+    }
+
+    /* ──────────────────────────────────────────────────────────────────
+     * PELNI (Kapal Laut) — channel PRODUCTION
+     * get_origin → get_destination → search → check_availability → book → payment
+     * Doc: docs/rajabiller-travel-pelni-api.md
+     * ────────────────────────────────────────────────────────────────── */
+
+    public function pelniOrigins(): array      { return $this->authed(self::CH_PROD, '/pelni/get_origin', []); }
+    public function pelniDestinations(): array  { return $this->authed(self::CH_PROD, '/pelni/get_destination', []); }
+
+    /** @param array $p { origin, destination, startDate(YYYY-MM-DD), endDate(YYYY-MM-DD) } */
+    public function searchPelni(array $p): array
+    {
+        return $this->authed(self::CH_PROD, '/pelni/search', [
+            'origin'      => (int) $p['origin'],
+            'destination' => (int) $p['destination'],
+            'startDate'   => $p['startDate'],
+            'endDate'     => $p['endDate'],
+        ]);
+    }
+
+    /** @param array $p { origin, originCall, destination, destinationCall, departureDate(YYYYMMDD), shipNumber, subClass, male, female } */
+    public function checkAvailabilityPelni(array $p): array
+    {
+        return $this->authed(self::CH_PROD, '/pelni/check_availability', [
+            'origin'          => (int) $p['origin'],
+            'originCall'      => $p['originCall'],
+            'destination'     => (int) $p['destination'],
+            'destinationCall' => $p['destinationCall'],
+            'departureDate'   => $p['departureDate'],
+            'shipNumber'      => $p['shipNumber'],
+            'subClass'        => $p['subClass'],
+            'male'            => (int) ($p['male'] ?? 0),
+            'female'          => (int) ($p['female'] ?? 0),
+        ]);
+    }
+
+    /**
+     * @param array $p semua field kapal + harga + contact + passengers{adults[{name,birthDate,identityNumber,gender}],children,infants}
+     */
+    public function bookPelni(array $p): array
+    {
+        return $this->authed(self::CH_PROD, '/pelni/book', [
+            'harga_dewasa'     => (string) ($p['hargaDewasa'] ?? '0'),
+            'harga_anak'       => (string) ($p['hargaAnak'] ?? '0'),
+            'harga_infant'     => (string) ($p['hargaInfant'] ?? '0'),
+            'pelabuhan_asal'   => $p['pelabuhanAsal'] ?? '',
+            'pelabuhan_tujuan' => $p['pelabuhanTujuan'] ?? '',
+            'shipName'         => $p['shipName'] ?? '',
+            'origin'           => (int) $p['origin'],
+            'originCall'       => $p['originCall'],
+            'destination'      => (int) $p['destination'],
+            'destinationCall'  => $p['destinationCall'],
+            'departureDate'    => $p['departureDate'],
+            'shipNumber'       => $p['shipNumber'],
+            'subClass'         => $p['subClass'],
+            'male'             => (int) ($p['male'] ?? 0),
+            'female'           => (int) ($p['female'] ?? 0),
+            'adult'            => (int) ($p['adult'] ?? 1),
+            'child'            => (int) ($p['child'] ?? 0),
+            'infant'           => (int) ($p['infant'] ?? 0),
+            'isFamily'         => $p['isFamily'] ?? 'N',
+            'contact'          => [
+                'email' => $p['contact']['email'] ?? '',
+                'phone' => $p['contact']['phone'] ?? '',
+            ],
+            'passengers'       => [
+                'adults'   => array_map([self::class, 'pelniPax'], $p['passengers']['adults']   ?? []),
+                'children' => array_map([self::class, 'pelniPax'], $p['passengers']['children'] ?? []),
+                'infants'  => array_map([self::class, 'pelniPax'], $p['passengers']['infants']  ?? []),
+            ],
+        ]);
+    }
+
+    /** Penumpang Pelni: { name, birthDate(Y-m-d), identityNumber, gender(M/F) } */
+    private static function pelniPax(array $p): array
+    {
+        return [
+            'name'           => $p['name'] ?? '',
+            'birthDate'      => $p['birthDate'] ?? ($p['birthdate'] ?? ''),
+            'identityNumber' => $p['identityNumber'] ?? ($p['idNumber'] ?? ''),
+            'gender'         => $p['gender'] ?? 'M',
+        ];
+    }
+
+    /** @param array $p { paymentCode, transactionId, simulate? } */
+    public function payPelni(array $p): array
+    {
+        $payload = [
+            'paymentCode'   => $p['paymentCode'],
+            'transactionId' => $p['transactionId'],
+        ];
+        if (!empty($p['simulate'])) {
+            $payload['simulateSuccess'] = 'yes';
+        }
+        return $this->authed(self::CH_PROD, '/pelni/payment', $payload);
+    }
+
+    /* ── Passenger string encoders (format Rajabiller, lihat doc) ──────── */
+
+    /** Tanggal Y-m-d → m/d/Y (format yang dipakai Rajabiller flight). */
+    private static function dobMDY(string $ymd): string
+    {
+        $parts = explode('-', $ymd);
+        return count($parts) === 3 ? "{$parts[1]}/{$parts[2]}/{$parts[0]}" : $ymd;
+    }
+
+    /** ADT;title;first;last;MM/DD/YYYY;NIK;::phone;::phone;;;;email;1;ID;ID;;;ID; */
+    private static function encodeAdult(array $p): string
+    {
+        $phone = $p['phone'] ?? '';
+        return implode(';', [
+            'ADT', $p['title'] ?? 'MR', $p['firstName'] ?? '', $p['lastName'] ?? '',
+            self::dobMDY($p['birthdate'] ?? ''), $p['idNumber'] ?? '',
+            "::{$phone}", "::{$phone}", '', '', '', $p['email'] ?? '',
+            '1', 'ID', 'ID', '', '', 'ID', '',
+        ]);
+    }
+
+    /** CHD;title;first;last;MM/DD/YYYY;NIK;ID;ID;;;ID; */
+    private static function encodeChild(array $p): string
+    {
+        return implode(';', [
+            'CHD', $p['title'] ?? 'MSTR', $p['firstName'] ?? '', $p['lastName'] ?? '',
+            self::dobMDY($p['birthdate'] ?? ''), $p['idNumber'] ?? '',
+            'ID', 'ID', '', '', 'ID', '',
+        ]);
+    }
+
+    /** INF;title;first;last;MM/DD/YYYY;NIK;ID;ID;;;ID; */
+    private static function encodeInfant(array $p): string
+    {
+        return implode(';', [
+            'INF', $p['title'] ?? 'MSTR', $p['firstName'] ?? '', $p['lastName'] ?? '',
+            self::dobMDY($p['birthdate'] ?? ''), $p['idNumber'] ?? '',
+            'ID', 'ID', '', '', 'ID', '',
+        ]);
+    }
+
+    /* ──────────────────────────────────────────────────────────────────
      * GENERAL — cek transaksi
      * ────────────────────────────────────────────────────────────────── */
 

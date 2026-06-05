@@ -181,6 +181,43 @@ class SettingController extends Controller
      * Pattern ini supaya legacy .env tetap jalan kalau cache di-clear.
      * ───────────────────────────────────────────────────────────────────── */
 
+    /* ──────────────────────────────────────────────────────────────────────
+     * Markup Travel — biaya layanan flat per penumpang (di atas harga vendor).
+     * Berlaku untuk semua moda: kereta, pesawat, bus, pelni.
+     * ───────────────────────────────────────────────────────────────────── */
+
+    public function getTravelMarkup()
+    {
+        return response()->json(['success' => true, 'data' => self::travelMarkup()]);
+    }
+
+    public function setTravelMarkup(Request $request)
+    {
+        $data = $request->validate([
+            'amount' => 'required|integer|min:0|max:1000000',
+        ]);
+
+        $settings = [
+            'amount'     => (int) $data['amount'],
+            'updated_by' => $request->user()->id,
+            'updated_at' => now()->toIso8601String(),
+        ];
+        Cache::forever('settings:travel_markup', $settings);
+
+        return response()->json([
+            'success' => true,
+            'data'    => $settings,
+            'message' => 'Markup travel: Rp ' . number_format($settings['amount'], 0, ',', '.') . ' / penumpang.',
+        ]);
+    }
+
+    /** Markup travel flat per pax. Default Rp 7.500. */
+    public static function travelMarkup(): array
+    {
+        $override = Cache::get('settings:travel_markup');
+        return ['amount' => (int) ($override['amount'] ?? 7500)];
+    }
+
     /**
      * PPN setting. Default: enabled (preserve perilaku lama) dengan
      * persen dari config ota.tax_percent (11%).

@@ -107,8 +107,13 @@ class BookingController extends Controller
         }
 
         $user = $request->user();
-        $adminRoles = ['superadmin', 'admin', 'finance'];
-        if (!in_array($user->getRoleNames()->first(), $adminRoles) && (int) $booking->user_id !== (int) $user->id) {
+        $role = $user->getRoleNames()->first();
+        $isAdmin       = in_array($role, ['superadmin', 'admin', 'finance']);
+        $isCustomerOwn = (int) $booking->user_id === (int) $user->id;
+        // Owner boleh lihat booking untuk hotel miliknya (extranet My ArahInn).
+        $isHotelOwner  = $role === 'owner' && (int) ($booking->hotel->owner_id ?? 0) === (int) $user->id;
+
+        if (!$isAdmin && !$isCustomerOwn && !$isHotelOwner) {
             return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
         }
 
