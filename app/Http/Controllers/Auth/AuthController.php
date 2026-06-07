@@ -191,6 +191,59 @@ class AuthController extends Controller
         ]);
     }
 
+    // ── Hapus Akun (Account Deletion) ─────────────────
+    // Wajib Apple App Store guideline 5.1.1(v): user bisa inisiasi & menyelesaikan
+    // penghapusan akun dari dalam app. Menghapus akun + data terkait (FK cascade).
+    public function deleteAccount(Request $request)
+    {
+        $user = $request->user();
+
+        // Untuk akun ber-password (bukan OAuth), kalau password dikirim → verifikasi.
+        // OAuth (Google/Apple) tidak punya password, jadi langsung lanjut.
+        if (!empty($user->password) && $request->filled('password')) {
+            if (!Hash::check($request->input('password'), $user->password)) {
+                return response()->json([
+                    'success' => false,
+                    'error'   => 'wrong_password',
+                    'message' => 'Password salah.',
+                ], 401);
+            }
+        }
+
+        $userId = $user->id;
+        ActivityLogService::log($userId, 'DELETE_ACCOUNT', 'user', $userId, $request);
+
+        // Cabut semua token akses lebih dulu (sesi langsung mati).
+        $user->tokens()->delete();
+
+        try {
+            // Hard delete — FK cascade menghapus data terkait milik user.
+            $user->syncRoles([]);
+            $user->delete();
+        } catch (\Throwable $e) {
+            // Fallback bila ada FK tanpa cascade: anonimkan PII + nonaktifkan,
+            // sehingga data pribadi tetap hilang & akun tak bisa dipakai lagi.
+            logger()->warning('deleteAccount hard-delete gagal, fallback anonimisasi', [
+                'user_id' => $userId, 'error' => $e->getMessage(),
+            ]);
+            $user->forceFill([
+                'name'           => 'Pengguna Dihapus',
+                'email'          => 'deleted_' . $userId . '_' . time() . '@deleted.arahinn.local',
+                'phone'          => null,
+                'avatar'         => null,
+                'password'       => Hash::make(Str::random(40)),
+                'oauth_provider' => null,
+                'oauth_id'       => null,
+                'is_active'      => false,
+            ])->save();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Akun Anda telah dihapus secara permanen.',
+        ]);
+    }
+
     // ── Logout ────────────────────────────────────────
     public function logout(Request $request)
     {

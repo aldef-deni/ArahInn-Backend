@@ -314,25 +314,53 @@ class TravelBookingController extends Controller
         ], $attrs));
     }
 
-    /* ── PAY (issue e-tiket) ────────────────────────────────────────── */
+    /* ── ADMIN: verifikasi transfer → terbitkan e-tiket ─────────────── */
 
     /**
-     * Setelah customer bayar → issue tiket ke Rajabiller.
-     * @param bool simulate (query/body) — pesawat: simulateSuccess (tes tanpa potong saldo asli).
+     * Admin list travel bookings (filter status). Untuk verifikasi pembayaran manual.
+     * GET /admin/travel/bookings?status=pending_payment
      */
-    public function pay(Request $request, string $id)
+    public function adminBookings(Request $request)
     {
-        $booking = TravelBooking::where('id', $id)->where('user_id', $request->user()->id)->firstOrFail();
+        $q = TravelBooking::with('user:id,name,email')->latest();
+        if ($request->status) $q->where('status', $request->status);
+        if ($request->moda)   $q->where('moda', $request->moda);
+        if ($request->search) {
+            $s = $request->search;
+            $q->where(fn ($w) => $w->where('code', 'like', "%$s%")
+                ->orWhere('origin_name', 'like', "%$s%")
+                ->orWhere('destination_name', 'like', "%$s%"));
+        }
+        return response()->json(['success' => true, 'data' => $q->paginate($request->limit ?? 20)]);
+    }
+
+    /**
+     * Admin terbitkan e-tiket setelah verifikasi transfer masuk.
+     * POST /admin/travel/bookings/{id}/issue   body: { simulate?: bool }
+     */
+    public function adminIssue(Request $request, string $id)
+    {
+        $booking = TravelBooking::findOrFail($id);
 
         if ($booking->status === 'issued') {
             return response()->json(['success' => true, 'data' => $booking, 'message' => 'Tiket sudah terbit.']);
         }
         if (!in_array($booking->status, ['pending_payment', 'paid'])) {
-            return response()->json(['success' => false, 'message' => 'Status pesanan tidak bisa dibayar.'], 422);
+            return response()->json(['success' => false, 'message' => 'Status pesanan tidak bisa diterbitkan.'], 422);
         }
 
-        $simulate = $request->boolean('simulate', true); // default simulate (tahap testing)
+        $simulate = $request->boolean('simulate', false); // admin verifikasi → terbit riil
+        $res = $this->issueBooking($booking, $simulate);
 
+        if (!$res['ok']) {
+            return response()->json(['success' => false, 'message' => $res['message']], 422);
+        }
+        return response()->json(['success' => true, 'data' => $booking->fresh(), 'message' => 'E-tiket berhasil diterbitkan.']);
+    }
+
+    /** Eksekusi issue ke Rajabiller + update booking + kirim e-tiket email. */
+    private function issueBooking(TravelBooking $booking, bool $simulate): array
+    {
         if ($booking->moda === 'kereta') {
             $book = $booking->meta['book'] ?? [];
             $res = $this->travel->payTrain($booking->vendor_booking_code, $booking->vendor_transaction_id, [
@@ -356,8 +384,7 @@ class TravelBookingController extends Controller
         }
 
         if (!TravelService::isSuccess($res['rc'] ?? null)) {
-            $booking->update(['status' => 'failed']);
-            return response()->json(['success' => false, 'message' => $res['rd'] ?? TravelService::userMessage($res['rc'] ?? null)], 422);
+            return ['ok' => false, 'message' => $res['rd'] ?? TravelService::userMessage($res['rc'] ?? null)];
         }
 
         $d = $res['data'] ?? [];
@@ -371,9 +398,8 @@ class TravelBookingController extends Controller
             'meta'        => array_merge($booking->meta ?? [], ['payment' => $d]),
         ]);
 
-        $this->sendEtiketEmail($booking->fresh(), $request->user());
-
-        return response()->json(['success' => true, 'data' => $booking->fresh(), 'message' => 'Tiket berhasil diterbitkan.']);
+        $this->sendEtiketEmail($booking->fresh(), $booking->user);
+        return ['ok' => true, 'message' => 'ok'];
     }
 
     /** Kirim e-tiket (email + PDF lampiran). Tidak boleh menggagalkan response issue. */

@@ -9,6 +9,7 @@ class RoomPrice extends Model
     protected $fillable = [
         'room_id', 'date', 'price', 'is_available', 'available_units',
         'softblock_count', 'min_stay', 'max_stay',
+        'min_advance_days', 'max_advance_days',
         'closed_to_arrival', 'closed_to_departure',
     ];
 
@@ -20,6 +21,8 @@ class RoomPrice extends Model
         'softblock_count'     => 'integer',
         'min_stay'            => 'integer',
         'max_stay'            => 'integer',
+        'min_advance_days'    => 'integer',
+        'max_advance_days'    => 'integer',
         'closed_to_arrival'   => 'boolean',
         'closed_to_departure' => 'boolean',
     ];

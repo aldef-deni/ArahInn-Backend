@@ -124,6 +124,8 @@ class RoomPriceController extends Controller
                     'softblock_count'     => 0,
                     'min_stay'            => null,
                     'max_stay'            => null,
+                    'min_advance_days'    => null,
+                    'max_advance_days'    => null,
                     'closed_to_arrival'   => false,
                     'closed_to_departure' => false,
                 ];
@@ -161,13 +163,15 @@ class RoomPriceController extends Controller
             'prices.*.softblock_count'        => 'sometimes|integer|min:0|max:9999',
             'prices.*.min_stay'               => 'sometimes|nullable|integer|min:1|max:365',
             'prices.*.max_stay'               => 'sometimes|nullable|integer|min:1|max:365',
+            'prices.*.min_advance_days'       => 'sometimes|nullable|integer|min:0|max:730',
+            'prices.*.max_advance_days'       => 'sometimes|nullable|integer|min:0|max:730',
             'prices.*.closed_to_arrival'      => 'sometimes|boolean',
             'prices.*.closed_to_departure'    => 'sometimes|boolean',
         ]);
 
         foreach ($request->prices as $entry) {
             $payload = [];
-            foreach (['price','is_available','available_units','softblock_count','min_stay','max_stay','closed_to_arrival','closed_to_departure'] as $f) {
+            foreach (['price','is_available','available_units','softblock_count','min_stay','max_stay','min_advance_days','max_advance_days','closed_to_arrival','closed_to_departure'] as $f) {
                 if (array_key_exists($f, $entry)) $payload[$f] = $entry[$f];
             }
             if (empty($payload)) continue;

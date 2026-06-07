@@ -183,6 +183,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // ── Auth ─────────────────────────────────────────
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me',      [AuthController::class, 'me']);
+    // Hapus akun (wajib Apple App Store guideline 5.1.1(v) — account deletion in-app)
+    Route::delete('/auth/account', [AuthController::class, 'deleteAccount']);
 
     // ── Property Listings (Owner) ─────────────────────
     Route::prefix('properties')->middleware('role:owner|admin|superadmin')->group(function () {
@@ -502,8 +504,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/checkout',           [\App\Http\Controllers\TravelBookingController::class, 'checkout']);
         Route::get('/bookings',            [\App\Http\Controllers\TravelBookingController::class, 'myBookings']);
         Route::get('/bookings/{id}',       [\App\Http\Controllers\TravelBookingController::class, 'show']);
-        Route::post('/bookings/{id}/pay',  [\App\Http\Controllers\TravelBookingController::class, 'pay']);
         Route::get('/bookings/{id}/etiket', [\App\Http\Controllers\TravelBookingController::class, 'downloadEtiket']);
+    });
+
+    // ── Admin: verifikasi pembayaran travel → terbitkan e-tiket ──────
+    Route::prefix('admin/travel')->middleware('role:superadmin|admin|finance')->group(function () {
+        Route::get('/bookings',             [\App\Http\Controllers\TravelBookingController::class, 'adminBookings']);
+        Route::post('/bookings/{id}/issue', [\App\Http\Controllers\TravelBookingController::class, 'adminIssue']);
     });
 
     Route::prefix('admin/ppob')->middleware('role:superadmin|admin|finance')->group(function () {
