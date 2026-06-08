@@ -280,17 +280,27 @@ class PpobController extends Controller
     }
 
     /**
-     * Admin: cek saldo akun Rajabiller (via method info pertama, ambil saldo_akhir).
+     * Admin: saldo deposit Rajabiller terkini.
      * GET /api/v1/admin/ppob/balance
+     *
+     * Sumber: kolom `saldo_akhir_rajabiller` dari transaksi TERAKHIR yang punya
+     * nilai saldo (direkam tiap transaksi sukses ke Rajabiller). Ini saldo deposit
+     * setelah transaksi terakhir — paling akurat tanpa endpoint cek-saldo khusus.
+     * (method info/cek/bayar Rajabiller tidak mengembalikan saldo di catalog call.)
      */
     public function adminBalance()
     {
-        $resp = $this->vendor->info('TELKOMSEL'); // dummy fetch untuk dapat saldo_akhir
-        $normalized = $this->vendor->extractCommonFields($resp);
+        $latest = PpobTransaction::whereNotNull('saldo_akhir_rajabiller')
+            ->where('saldo_akhir_rajabiller', '>', 0)
+            ->orderByDesc('updated_at')
+            ->first(['saldo_akhir_rajabiller', 'updated_at', 'trx_code']);
+
         return response()->json([
-            'success' => true,
-            'balance' => $normalized['saldo_akhir'] ?? 0,
-            'rc'      => $resp['rc'] ?? null,
+            'success'    => true,
+            'balance'    => $latest ? (float) $latest->saldo_akhir_rajabiller : 0,
+            'updated_at' => $latest?->updated_at,
+            'trx_code'   => $latest?->trx_code,
+            'source'     => 'last_transaction',
         ]);
     }
 
