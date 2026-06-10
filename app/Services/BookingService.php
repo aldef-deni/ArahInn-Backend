@@ -17,11 +17,14 @@ use Illuminate\Support\Facades\Mail;
 // =====================================================
 class RoomLockService
 {
-    private int $lockMinutes;
+    private int $lockSeconds;
 
     public function __construct()
     {
-        $this->lockMinutes = (int) config('ota.booking_expiry_minutes', 30);
+        // Mutex PENDEK (detik) — hanya cegah 2 request bersamaan double-book unit
+        // terakhir. BUKAN hold 30 menit. Ketersediaan per-tanggal dijaga oleh
+        // assertAllotment (yang sudah menghitung booking pending + paid per tanggal).
+        $this->lockSeconds = (int) config('ota.booking_lock_seconds', 20);
     }
 
     public function lock(int $roomId, string $bookingCode): bool
@@ -29,7 +32,7 @@ class RoomLockService
         $lockKey = "room_lock:{$roomId}";
 
         // Atomic check-and-set: add() returns false if key exists
-        $result = Cache::add($lockKey, $bookingCode, now()->addMinutes($this->lockMinutes));
+        $result = Cache::add($lockKey, $bookingCode, now()->addSeconds($this->lockSeconds));
 
         if (!$result) {
             throw new \RuntimeException(
@@ -69,30 +72,32 @@ class BookingService
 
     public function create(array $data, int $userId): array
     {
-        // 0. Cek allotment per tanggal (available_units) sebelum hitung harga
-        $this->assertAllotment(
-            (int) $data['room_id'],
-            $data['check_in'],
-            $data['check_out'],
-            (int) ($data['room_count'] ?? 1)
-        );
-
-        // 1. Hitung harga
-        $priceData = $this->pricing->calculate([
-            'room_id'    => $data['room_id'],
-            'check_in'   => $data['check_in'],
-            'check_out'  => $data['check_out'],
-            'promo_code' => $data['promo_code'] ?? null,
-            'user_id'    => $userId,
-            'use_points' => $data['use_points'] ?? false,
-            'room_count' => $data['room_count'] ?? 1,
-        ]);
-
-        // 2. Lock kamar
+        // Mutex pendek: kunci room sebentar supaya cek ketersediaan + simpan booking
+        // bersifat atomic (cegah 2 request bersamaan double-book unit terakhir).
+        // Dilepas SELALU di finally — tidak nyangkut, tidak memblokir user sendiri.
         $bookingCode = Booking::generateCode();
-        $this->lock->lock($data['room_id'], $bookingCode);
+        $this->lock->lock((int) $data['room_id'], $bookingCode);
 
         try {
+            // 0. Cek allotment per tanggal (sudah menghitung booking pending + paid)
+            $this->assertAllotment(
+                (int) $data['room_id'],
+                $data['check_in'],
+                $data['check_out'],
+                (int) ($data['room_count'] ?? 1)
+            );
+
+            // 1. Hitung harga
+            $priceData = $this->pricing->calculate([
+                'room_id'    => $data['room_id'],
+                'check_in'   => $data['check_in'],
+                'check_out'  => $data['check_out'],
+                'promo_code' => $data['promo_code'] ?? null,
+                'user_id'    => $userId,
+                'use_points' => $data['use_points'] ?? false,
+                'room_count' => $data['room_count'] ?? 1,
+            ]);
+
             // 3. Simpan ke database (transaksi)
             $booking = DB::transaction(function () use ($data, $userId, $priceData, $bookingCode) {
                 $booking = Booking::create([
@@ -152,9 +157,10 @@ class BookingService
 
             return ['booking' => $booking, 'pricing' => $priceData];
 
-        } catch (\Exception $e) {
-            $this->lock->unlock($data['room_id']);
-            throw $e;
+        } finally {
+            // Selalu lepas mutex (sukses/gagal) → kamar tidak ter-lock berlama-lama
+            // & user tidak terblokir oleh lock-nya sendiri saat retry.
+            $this->lock->unlock((int) $data['room_id']);
         }
     }
 
