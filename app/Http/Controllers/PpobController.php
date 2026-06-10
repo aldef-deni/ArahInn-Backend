@@ -311,11 +311,10 @@ class PpobController extends Controller
     public function adminRetry(string $trxCode)
     {
         $trx = PpobTransaction::where('trx_code', $trxCode)->firstOrFail();
-        if (!in_array($trx->status, ['failed', 'paid', 'processing'], true)) {
-            return response()->json(['success' => false, 'message' => "Status {$trx->status} tidak dapat di-retry."], 400);
-        }
         try {
-            $trx = $this->ppob->adminMarkPaidAndExecute($trx, request()->user()->id, 'Manual retry');
+            // Re-hit dengan ref1 BARU (failed/refundable/paid) — sekaligus fix retry
+            // lama yang keliru panggil mark-paid (hanya berlaku status pending).
+            $trx = $this->ppob->reHit($trx, request()->user()->id, 'Manual re-hit');
             return response()->json(['success' => true, 'data' => $this->presentTransaction($trx)]);
         } catch (\Throwable $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage()], 400);

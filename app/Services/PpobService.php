@@ -281,6 +281,34 @@ class PpobService
     }
 
     /* ────────────────────────────────────────────────────────────────────
+     | Re-hit transaksi gagal/refundable ke Rajabiller.
+     | Pakai ref1 BARU supaya tidak dianggap duplikat (RC 97) oleh vendor —
+     | sesuai instruksi Rajabiller "silakan hit transaksi baru saat produk
+     | sudah open kembali". Reset rc/sn/failure_reason lalu eksekusi ulang.
+     ──────────────────────────────────────────────────────────────────── */
+    public function reHit(PpobTransaction $trx, int $adminId, ?string $notes = null): PpobTransaction
+    {
+        if (!in_array($trx->status, ['failed', 'refundable', 'paid'], true)) {
+            throw new \RuntimeException("Status {$trx->status} tidak dapat di-re-hit.");
+        }
+
+        $trx->update([
+            'ref1'           => PpobTransaction::generateRef1(),
+            'status'         => 'processing',
+            'rc'             => null,
+            'serial_number'  => null,
+            'failure_reason' => null,
+            'executed_at'    => now(),
+            'paid_by'        => $adminId,
+            'paid_notes'     => $notes ?? 'Manual re-hit',
+        ]);
+
+        $this->executePayment($trx, $trx->extra_request ?? []);
+
+        return $trx->fresh();
+    }
+
+    /* ────────────────────────────────────────────────────────────────────
      | Eksekusi bayar() — shared antara prepaid + postpaid step 2.
      ──────────────────────────────────────────────────────────────────── */
     private function executePayment(PpobTransaction $trx, array $extra): void
