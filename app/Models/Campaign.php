@@ -8,16 +8,17 @@ class Campaign extends Model
 {
     protected $fillable = [
         'title', 'type', 'target', 'status',
-        'start_date', 'end_date', 'budget', 'description',
+        'start_date', 'end_date', 'budget', 'discount_percent', 'description',
         'owner_id', 'created_by', 'views', 'clicks',
     ];
 
     protected $casts = [
-        'budget'     => 'decimal:2',
-        'start_date' => 'date:Y-m-d',
-        'end_date'   => 'date:Y-m-d',
-        'views'      => 'integer',
-        'clicks'     => 'integer',
+        'budget'           => 'decimal:2',
+        'discount_percent' => 'decimal:2',
+        'start_date'       => 'date:Y-m-d',
+        'end_date'         => 'date:Y-m-d',
+        'views'            => 'integer',
+        'clicks'           => 'integer',
     ];
 
     public function owner()

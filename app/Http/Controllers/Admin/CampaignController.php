@@ -87,20 +87,23 @@ class CampaignController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'title'       => 'required|string|max:255',
-            'type'        => 'required|in:banner,email,push,popup',
-            'target'      => 'required|in:all,new_user,loyal,inactive',
-            'status'      => 'required|in:draft,active,inactive,ended',
-            'start_date'  => 'nullable|date',
-            'end_date'    => 'nullable|date|after_or_equal:start_date',
-            'budget'      => 'nullable|numeric|min:0',
-            'description' => 'nullable|string',
+            'title'            => 'required|string|max:255',
+            'type'             => 'required|array|min:1',
+            'type.*'           => 'in:banner,popup',
+            'target'           => 'required|in:all,new_user,loyal,inactive',
+            'status'           => 'required|in:draft,active,inactive,ended',
+            'start_date'       => 'nullable|date',
+            'end_date'         => 'nullable|date|after_or_equal:start_date',
+            'discount_percent' => 'nullable|numeric|min:0|max:100',
+            'description'      => 'nullable|string',
         ]);
 
+        // type bisa multi (banner/popup) → simpan sebagai "banner,popup"
+        $data['type']             = implode(',', $data['type']);
         // Semua campaign = global (dibuat superadmin, masuk ke semua owner).
-        $data['owner_id']   = null;
-        $data['created_by'] = $request->user()->id;
-        $data['budget']     = $data['budget'] ?? 0;
+        $data['owner_id']         = null;
+        $data['created_by']       = $request->user()->id;
+        $data['discount_percent'] = $data['discount_percent'] ?? 0;
 
         $campaign = Campaign::create($data);
         return response()->json(['success' => true, 'data' => $campaign], 201);
@@ -111,15 +114,20 @@ class CampaignController extends Controller
         $campaign = Campaign::findOrFail($id);
 
         $data = $request->validate([
-            'title'       => 'sometimes|required|string|max:255',
-            'type'        => 'sometimes|required|in:banner,email,push,popup',
-            'target'      => 'sometimes|required|in:all,new_user,loyal,inactive',
-            'status'      => 'sometimes|required|in:draft,active,inactive,ended',
-            'start_date'  => 'nullable|date',
-            'end_date'    => 'nullable|date|after_or_equal:start_date',
-            'budget'      => 'nullable|numeric|min:0',
-            'description' => 'nullable|string',
+            'title'            => 'sometimes|required|string|max:255',
+            'type'             => 'sometimes|required|array|min:1',
+            'type.*'           => 'in:banner,popup',
+            'target'           => 'sometimes|required|in:all,new_user,loyal,inactive',
+            'status'           => 'sometimes|required|in:draft,active,inactive,ended',
+            'start_date'       => 'nullable|date',
+            'end_date'         => 'nullable|date|after_or_equal:start_date',
+            'discount_percent' => 'nullable|numeric|min:0|max:100',
+            'description'      => 'nullable|string',
         ]);
+
+        if (isset($data['type'])) {
+            $data['type'] = implode(',', $data['type']);
+        }
 
         $campaign->update($data);
         return response()->json(['success' => true, 'data' => $campaign]);
