@@ -9,7 +9,7 @@ class Campaign extends Model
     protected $fillable = [
         'title', 'type', 'target', 'status',
         'start_date', 'end_date', 'budget', 'discount_percent', 'description',
-        'owner_id', 'created_by', 'views', 'clicks',
+        'image', 'owner_id', 'created_by', 'views', 'clicks',
     ];
 
     protected $casts = [

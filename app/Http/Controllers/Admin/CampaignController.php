@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Campaign;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 
 class CampaignController extends Controller
 {
@@ -96,7 +97,10 @@ class CampaignController extends Controller
             'end_date'         => 'nullable|date|after_or_equal:start_date',
             'discount_percent' => 'nullable|numeric|min:0|max:100',
             'description'      => 'nullable|string',
+            'image'            => 'nullable|file|max:4096',
         ]);
+
+        $this->assertValidImage($request);
 
         // type bisa multi (banner/popup) → simpan sebagai "banner,popup"
         $data['type']             = implode(',', $data['type']);
@@ -104,6 +108,10 @@ class CampaignController extends Controller
         $data['owner_id']         = null;
         $data['created_by']       = $request->user()->id;
         $data['discount_percent'] = $data['discount_percent'] ?? 0;
+
+        if ($request->hasFile('image')) {
+            $data['image'] = $this->storeImageLocally($request->file('image'));
+        }
 
         $campaign = Campaign::create($data);
         return response()->json(['success' => true, 'data' => $campaign], 201);
@@ -123,10 +131,22 @@ class CampaignController extends Controller
             'end_date'         => 'nullable|date|after_or_equal:start_date',
             'discount_percent' => 'nullable|numeric|min:0|max:100',
             'description'      => 'nullable|string',
+            'image'            => 'nullable|file|max:4096',
         ]);
+
+        $this->assertValidImage($request);
 
         if (isset($data['type'])) {
             $data['type'] = implode(',', $data['type']);
+        }
+
+        if ($request->hasFile('image')) {
+            // Hapus image lama langsung dari filesystem
+            if ($campaign->image) {
+                $oldPath = storage_path('app/public/' . $campaign->image);
+                if (is_file($oldPath)) @unlink($oldPath);
+            }
+            $data['image'] = $this->storeImageLocally($request->file('image'));
         }
 
         $campaign->update($data);
@@ -137,5 +157,33 @@ class CampaignController extends Controller
     {
         Campaign::findOrFail($id)->delete();
         return response()->json(['success' => true, 'message' => 'Campaign dihapus.']);
+    }
+
+    // ── Validasi ekstensi image manual (server tanpa ext fileinfo) ────────
+    private function assertValidImage(Request $request): void
+    {
+        if ($request->hasFile('image')) {
+            $ext = strtolower($request->file('image')->getClientOriginalExtension());
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
+                abort(response()->json([
+                    'success' => false,
+                    'message' => 'Format gambar harus jpg, jpeg, png, atau webp.',
+                ], 422));
+            }
+        }
+    }
+
+    // ── Simpan image tanpa Flysystem (sama seperti PromoController) ────────
+    private function storeImageLocally(UploadedFile $file): string
+    {
+        $dir  = storage_path('app/public/uploads/campaigns');
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        $ext  = strtolower($file->getClientOriginalExtension() ?: 'jpg');
+        $name = uniqid('campaign_', true) . '.' . $ext;
+        $oldMask = umask(0022);
+        $file->move($dir, $name);
+        umask($oldMask);
+        @chmod($dir . DIRECTORY_SEPARATOR . $name, 0644);
+        return 'uploads/campaigns/' . $name;
     }
 }
