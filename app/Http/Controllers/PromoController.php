@@ -14,7 +14,13 @@ class PromoController extends Controller
     // ── Public: active global promos + owner-targeted promos for authenticated owner ──
     public function active(Request $request)
     {
-        $query = Promo::active();
+        // Untuk DISPLAY di home: tampilkan promo yang aktif DAN yang akan datang
+        // (upcoming, start_date di masa depan), asalkan belum expired. Beda dengan
+        // scope active() yang dipakai untuk PENERAPAN diskon (butuh start_date <= now).
+        $query = Promo::where('is_active', true)
+            ->where(fn($q) => $q->whereNull('end_date')->orWhere('end_date', '>=', now()))
+            ->orderByRaw('CASE WHEN start_date IS NULL OR start_date <= NOW() THEN 0 ELSE 1 END') // yang berjalan dulu
+            ->orderBy('start_date');
         $user  = auth('sanctum')->user();
 
         if ($user && $user->hasRole('owner')) {
