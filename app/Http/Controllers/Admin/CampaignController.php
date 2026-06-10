@@ -4,57 +4,37 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Campaign;
-use App\Models\MarketManagerOwner;
 use Illuminate\Http\Request;
 
 class CampaignController extends Controller
 {
-    public function index(\Illuminate\Http\Request $request)
+    // Admin: semua campaign (global) + jumlah owner yang mengikuti
+    public function index(Request $request)
     {
-        $user  = $request->user();
-        $query = Campaign::with('owner:id,name,email')->latest();
-
-        // Market Manager: filter to assigned owners only
-        if ($user->hasRole('admin')) {
-            $ownerIds = MarketManagerOwner::where('market_manager_id', $user->id)->pluck('owner_id');
-            if ($ownerIds->isEmpty()) {
-                return response()->json(['success' => true, 'data' => []]);
-            }
-            $query->whereIn('owner_id', $ownerIds);
-        }
-
-        return response()->json(['success' => true, 'data' => $query->get()]);
+        $campaigns = Campaign::withCount('followers')->latest()->get();
+        return response()->json(['success' => true, 'data' => $campaigns]);
     }
 
-    // ── Public: active campaigns for a specific hotel (via owner_id) ────────
+    // ── Public: campaigns aktif untuk hotel ini = campaign yang DIIKUTI ownernya ──
     public function forHotel(string $hotelId)
     {
         $hotel = \App\Models\Hotel::findOrFail($hotelId);
 
         $campaigns = Campaign::where('status', 'active')
-            ->where(function ($q) use ($hotel) {
-                $q->whereNull('owner_id')
-                  ->orWhere('owner_id', $hotel->owner_id);
-            })
+            ->where(fn($q) => $q->whereNull('end_date')->orWhere('end_date', '>=', now()))
+            ->whereHas('followers', fn($q) => $q->where('users.id', $hotel->owner_id))
             ->latest()
             ->get();
 
         return response()->json(['success' => true, 'data' => $campaigns]);
     }
 
-    // ── Public: campaign platform aktif untuk ditampilkan di home website ──
-    // Tampilkan campaign platform (owner_id null) yang status='active' & belum
-    // expired — termasuk yang akan datang (upcoming), supaya info-nya muncul.
+    // ── Public: campaign aktif untuk ditampilkan di home website ──────────
+    // Semua campaign dibuat superadmin = global. Tampilkan yang status='active'
+    // & belum expired (termasuk upcoming).
     public function activePublic()
     {
-        // Platform (owner_id null) ATAU campaign yang dibuat admin/superadmin
-        // (meski ditargetkan ke owner tertentu) — wajib tampil di home.
-        $adminIds = \App\Models\User::role(['admin', 'superadmin'])->pluck('id');
-
         $campaigns = Campaign::where('status', 'active')
-            ->where(function ($q) use ($adminIds) {
-                $q->whereNull('owner_id')->orWhereIn('created_by', $adminIds);
-            })
             ->where(fn($q) => $q->whereNull('end_date')->orWhere('end_date', '>=', now()))
             ->latest()
             ->get();
@@ -62,24 +42,46 @@ class CampaignController extends Controller
         return response()->json(['success' => true, 'data' => $campaigns]);
     }
 
-    // ── Owner: campaigns targeting this owner (global + targeted) ────────
+    // ── Owner: SEMUA campaign aktif (global) + flag followed untuk owner ini ──
     public function myList(Request $request)
     {
         $userId = $request->user()->id;
-        // Campaign yang dibuat admin/superadmin WAJIB masuk ke SEMUA owner (untuk
-        // dipilih ikut/tidak). Plus campaign global (owner_id null) & yang ditarget
-        // ke owner ini.
-        $adminIds = \App\Models\User::role(['admin', 'superadmin'])->pluck('id');
-        $campaigns = Campaign::with('owner:id,name,email')
-            ->where('status', 'active')
-            ->where(function ($q) use ($userId, $adminIds) {
-                $q->whereNull('owner_id')
-                  ->orWhere('owner_id', $userId)
-                  ->orWhereIn('created_by', $adminIds);
-            })
+        $campaigns = Campaign::where('status', 'active')
+            ->where(fn($q) => $q->whereNull('end_date')->orWhere('end_date', '>=', now()))
+            ->withCount(['followers as is_followed' => fn($q) => $q->where('users.id', $userId)])
             ->latest()
-            ->get();
+            ->get()
+            ->map(function ($c) {
+                $c->followed = (bool) $c->is_followed;
+                unset($c->is_followed);
+                return $c;
+            });
         return response()->json(['success' => true, 'data' => $campaigns]);
+    }
+
+    // ── Owner: ikut / berhenti ikut campaign ─────────────────────────────
+    public function follow(Request $request, string $id)
+    {
+        $campaign = Campaign::where('status', 'active')->findOrFail($id);
+        $campaign->followers()->syncWithoutDetaching([$request->user()->id]);
+
+        return response()->json([
+            'success'  => true,
+            'message'  => 'Campaign diikuti. Akan tampil di halaman properti Anda.',
+            'followed' => true,
+        ]);
+    }
+
+    public function unfollow(Request $request, string $id)
+    {
+        $campaign = Campaign::findOrFail($id);
+        $campaign->followers()->detach($request->user()->id);
+
+        return response()->json([
+            'success'  => true,
+            'message'  => 'Campaign dihentikan.',
+            'followed' => false,
+        ]);
     }
 
     public function store(Request $request)
@@ -93,14 +95,15 @@ class CampaignController extends Controller
             'end_date'    => 'nullable|date|after_or_equal:start_date',
             'budget'      => 'nullable|numeric|min:0',
             'description' => 'nullable|string',
-            'owner_id'    => 'nullable|integer|exists:users,id',
         ]);
 
+        // Semua campaign = global (dibuat superadmin, masuk ke semua owner).
+        $data['owner_id']   = null;
         $data['created_by'] = $request->user()->id;
         $data['budget']     = $data['budget'] ?? 0;
 
         $campaign = Campaign::create($data);
-        return response()->json(['success' => true, 'data' => $campaign->load('owner:id,name,email')], 201);
+        return response()->json(['success' => true, 'data' => $campaign], 201);
     }
 
     public function update(Request $request, string $id)
@@ -116,11 +119,10 @@ class CampaignController extends Controller
             'end_date'    => 'nullable|date|after_or_equal:start_date',
             'budget'      => 'nullable|numeric|min:0',
             'description' => 'nullable|string',
-            'owner_id'    => 'nullable|integer|exists:users,id',
         ]);
 
         $campaign->update($data);
-        return response()->json(['success' => true, 'data' => $campaign->load('owner:id,name,email')]);
+        return response()->json(['success' => true, 'data' => $campaign]);
     }
 
     public function destroy(string $id)

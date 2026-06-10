@@ -29,4 +29,15 @@ class Campaign extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+
+    // Owner yang mengikuti campaign ini (opt-in dari extranet)
+    public function followers()
+    {
+        return $this->belongsToMany(User::class, 'campaign_followers', 'campaign_id', 'owner_id')->withTimestamps();
+    }
+
+    public function isFollowedBy($ownerId): bool
+    {
+        return $this->followers()->where('users.id', $ownerId)->exists();
+    }
 }

@@ -320,8 +320,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/owner/market-manager', [MarketManagerController::class, 'myMarketManager'])
         ->middleware('role:owner');
 
-    // ── Campaigns (Owner: view campaigns targeting them) ──────────────────
+    // ── Campaigns (Owner: lihat semua campaign global + ikut/berhenti) ────
     Route::get('/campaigns/my', [CampaignController::class, 'myList'])
+        ->middleware('role:owner');
+    Route::post('/campaigns/{id}/follow', [CampaignController::class, 'follow'])
+        ->middleware('role:owner');
+    Route::delete('/campaigns/{id}/follow', [CampaignController::class, 'unfollow'])
         ->middleware('role:owner');
 
     // ── Users ─────────────────────────────────────────
