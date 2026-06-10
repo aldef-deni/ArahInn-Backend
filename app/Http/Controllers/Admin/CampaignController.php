@@ -42,6 +42,20 @@ class CampaignController extends Controller
         return response()->json(['success' => true, 'data' => $campaigns]);
     }
 
+    // ── Public: campaign platform aktif untuk ditampilkan di home website ──
+    // Tampilkan campaign platform (owner_id null) yang status='active' & belum
+    // expired — termasuk yang akan datang (upcoming), supaya info-nya muncul.
+    public function activePublic()
+    {
+        $campaigns = Campaign::where('status', 'active')
+            ->whereNull('owner_id')
+            ->where(fn($q) => $q->whereNull('end_date')->orWhere('end_date', '>=', now()))
+            ->latest()
+            ->get();
+
+        return response()->json(['success' => true, 'data' => $campaigns]);
+    }
+
     // ── Owner: campaigns targeting this owner (global + targeted) ────────
     public function myList(Request $request)
     {

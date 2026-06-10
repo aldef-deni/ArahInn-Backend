@@ -103,6 +103,9 @@ Route::prefix('promos')->group(function () {
     Route::get('/flyers',      [PromoController::class, 'flyers']);
 });
 
+// ── Campaigns (Public: campaign platform aktif untuk ditampilkan di home) ──
+Route::get('/campaigns/active', [CampaignController::class, 'activePublic']);
+
 // ── Property Listings (Owner - must be before public /{id} wildcard) ────
 Route::get('/properties/my-listings', [PropertyListingController::class, 'myListings'])
     ->middleware(['auth:sanctum', 'role:owner']);
