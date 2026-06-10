@@ -11,7 +11,7 @@ class Promo extends Model
         'discount_type', 'discount_value',
         'min_purchase', 'max_discount', 'quota', 'used_count',
         'start_date', 'end_date', 'is_active', 'created_by', 'owner_id',
-        'day_type', 'hotel_types', 'location',
+        'day_type', 'hotel_types', 'location', 'product_types',
     ];
 
     protected $casts = [
@@ -22,6 +22,7 @@ class Promo extends Model
         'start_date' => 'datetime',
         'end_date' => 'datetime',
         'hotel_types' => 'array',
+        'product_types' => 'array',
     ];
 
     protected $attributes = [
@@ -112,8 +113,19 @@ class Promo extends Model
      * Return pesan error kalau TIDAK memenuhi, atau null kalau lolos/tidak ada kondisi.
      * Kondisi yang kosong = tidak diterapkan.
      */
-    public function conditionError(?Hotel $hotel, ?string $checkIn): ?string
+    public function conditionError(?Hotel $hotel, ?string $checkIn, string $productType = 'accommodation'): ?string
     {
+        // 0. Berlaku untuk produk apa (accommodation/pesawat/pelni/kereta).
+        $products = is_array($this->product_types) ? array_filter($this->product_types) : [];
+        if (!empty($products) && !in_array($productType, $products, true)) {
+            $labels = [
+                'accommodation' => 'Akomodasi', 'pesawat' => 'Tiket Pesawat',
+                'pelni' => 'Tiket PELNI', 'kereta' => 'Tiket KAI',
+            ];
+            $names = array_map(fn ($p) => $labels[$p] ?? $p, $products);
+            return 'Promo ini hanya berlaku untuk: ' . implode(', ', $names) . '.';
+        }
+
         // 1. Hari berlaku (weekday/weekend) — berdasarkan tanggal check-in.
         if ($this->day_type && $checkIn) {
             $dow       = \Carbon\Carbon::parse($checkIn)->dayOfWeek; // 0=Min .. 6=Sab
