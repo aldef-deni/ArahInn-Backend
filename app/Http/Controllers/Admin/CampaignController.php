@@ -47,8 +47,14 @@ class CampaignController extends Controller
     // expired — termasuk yang akan datang (upcoming), supaya info-nya muncul.
     public function activePublic()
     {
+        // Platform (owner_id null) ATAU campaign yang dibuat admin/superadmin
+        // (meski ditargetkan ke owner tertentu) — wajib tampil di home.
+        $adminIds = \App\Models\User::role(['admin', 'superadmin'])->pluck('id');
+
         $campaigns = Campaign::where('status', 'active')
-            ->whereNull('owner_id')
+            ->where(function ($q) use ($adminIds) {
+                $q->whereNull('owner_id')->orWhereIn('created_by', $adminIds);
+            })
             ->where(fn($q) => $q->whereNull('end_date')->orWhere('end_date', '>=', now()))
             ->latest()
             ->get();

@@ -33,7 +33,14 @@ class PromoController extends Controller
                   });
             });
         } else {
-            $query->whereNull('owner_id');
+            // Publik/customer: tampilkan promo PLATFORM (owner_id null) ATAU promo
+            // yang DIBUAT oleh admin/superadmin (meski ditargetkan ke owner tertentu).
+            // Aturan: promo buatan superadmin wajib tampil di home.
+            $adminIds = \App\Models\User::role(['admin', 'superadmin'])->pluck('id');
+            $query->where(function ($q) use ($adminIds) {
+                $q->whereNull('owner_id')
+                  ->orWhereIn('created_by', $adminIds);
+            });
         }
 
         return response()->json(['success' => true, 'data' => $query->get()]);
