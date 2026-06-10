@@ -191,8 +191,7 @@ class PromoController extends Controller
 
         $data = $request->validate([
             'name'           => 'required|string',
-            'code'           => 'nullable|string|unique:promos',
-            'type'           => 'required|in:voucher,flash_sale,loyalty',
+            'code'           => 'required|string|unique:promos',  // voucher WAJIB pakai kode
             'description'    => 'nullable|string|max:2000',
             'image'          => 'nullable|file|max:4096',
             'discount_type'  => 'required|in:percent,fixed',
@@ -204,6 +203,9 @@ class PromoController extends Controller
             'end_date'       => 'nullable|date|after:start_date',
             'owner_id'       => 'nullable|integer|exists:users,id',
         ]);
+
+        // Semua promo bertipe voucher (berlaku via kode di checkout).
+        $data['type'] = 'voucher';
 
         // Manual extension check (bypass fileinfo)
         if ($request->hasFile('image')) {
