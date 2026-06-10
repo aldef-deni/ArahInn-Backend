@@ -13,6 +13,7 @@ class TravelBooking extends Model
         'origin', 'destination', 'origin_name', 'destination_name',
         'depart_date', 'depart_time', 'arrive_time', 'service_name', 'class',
         'passengers', 'pax', 'vendor_price', 'markup', 'total_price',
+        'promo_id', 'promo_discount',
         'status', 'payment_method', 'time_limit', 'paid_at', 'issued_at',
         'url_etiket', 'url_struk', 'url_image', 'meta',
     ];

@@ -64,6 +64,11 @@ class TravelBookingController extends Controller
         $infant = (int) ($v['infant'] ?? 0);
         $markup = (int) ($v['markup'] ?? SettingController::travelMarkup()['amount']);
 
+        // Hitung total + validasi promo SEBELUM booking vendor (hindari booking sia-sia)
+        $vendorPrice = (int) round(((float) $v['price_adult']) * $adult);
+        $total       = $vendorPrice + $markup * $adult;
+        [$promo, $promoDiscount] = $this->resolveTravelPromo($request, 'kereta', (float) $total, $v['date']);
+
         $res = $this->travel->bookTrain([
             'origin'           => strtoupper($v['origin']),
             'destination'      => strtoupper($v['destination']),
@@ -99,7 +104,6 @@ class TravelBookingController extends Controller
         }
 
         $d = $res['data'] ?? [];
-        $vendorPrice = (int) round(((float) $v['price_adult']) * $adult);
 
         $booking = $this->createRecord($request, [
             'moda'         => 'kereta',
@@ -116,13 +120,16 @@ class TravelBookingController extends Controller
             'pax'          => $adult,
             'vendor_price' => $vendorPrice,
             'markup'       => $markup,
-            'total_price'  => $vendorPrice + $markup * $adult,
+            'total_price'  => $total - $promoDiscount,
+            'promo_id'       => $promo?->id,
+            'promo_discount' => $promoDiscount,
             'vendor_booking_code'   => $d['bookingCode'] ?? null,
             'vendor_transaction_id' => $d['transactionId'] ?? null,
             'time_limit'   => $d['timeLimit'] ?? null,
             'passengers'   => $v['passengers'],
             'meta'         => ['book' => $d],
         ]);
+        if ($promo) $promo->increment('used_count');
 
         return response()->json(['success' => true, 'data' => $booking], 201);
     }
@@ -154,6 +161,11 @@ class TravelBookingController extends Controller
         $payingPax = $adult + $child;
         $markup = (int) ($v['markup'] ?? SettingController::travelMarkup()['amount']);
 
+        // Hitung total + validasi promo SEBELUM booking vendor
+        $vendorPrice = (int) round(((float) $v['price']) * $payingPax);
+        $total       = $vendorPrice + $markup * $payingPax;
+        [$promo, $promoDiscount] = $this->resolveTravelPromo($request, 'pesawat', (float) $total, $v['departure_date']);
+
         $mapPax = fn($p) => [
             'title' => $p['title'] ?? 'MR', 'firstName' => $p['first_name'] ?? '',
             'lastName' => $p['last_name'] ?? '', 'birthdate' => $p['birthdate'] ?? '',
@@ -180,7 +192,6 @@ class TravelBookingController extends Controller
         }
 
         $d = $res['data'] ?? [];
-        $vendorPrice = (int) round(((float) $v['price']) * $payingPax);
 
         $booking = $this->createRecord($request, [
             'moda'         => 'pesawat',
@@ -195,13 +206,16 @@ class TravelBookingController extends Controller
             'pax'          => $payingPax,
             'vendor_price' => $vendorPrice,
             'markup'       => $markup,
-            'total_price'  => $vendorPrice + $markup * $payingPax,
+            'total_price'  => $total - $promoDiscount,
+            'promo_id'       => $promo?->id,
+            'promo_discount' => $promoDiscount,
             'vendor_booking_code'   => $d['bookingCode'] ?? null,
             'vendor_transaction_id' => $d['transactionId'] ?? null,
             'time_limit'   => $d['timeLimitYMD'] ?? null,
             'passengers'   => $v['passengers'],
             'meta'         => ['book' => $d, 'paymentCode' => $d['paymentCode'] ?? ''],
         ]);
+        if ($promo) $promo->increment('used_count');
 
         return response()->json(['success' => true, 'data' => $booking], 201);
     }
@@ -244,6 +258,12 @@ class TravelBookingController extends Controller
         $payingPax = $adult + $child;
         $markup = (int) ($v['markup'] ?? SettingController::travelMarkup()['amount']);
 
+        // Hitung total + validasi promo SEBELUM booking vendor
+        $vendorPrice = (int) round(((float) $v['harga_dewasa']) * $adult + ((float) ($v['harga_anak'] ?? 0)) * $child + ((float) ($v['harga_infant'] ?? 0)) * $infant);
+        $total       = $vendorPrice + $markup * $payingPax;
+        $departYmd   = substr($v['departure_date'], 0, 4) . '-' . substr($v['departure_date'], 4, 2) . '-' . substr($v['departure_date'], 6, 2);
+        [$promo, $promoDiscount] = $this->resolveTravelPromo($request, 'pelni', (float) $total, $departYmd);
+
         $mapPax = fn($p) => [
             'name' => $p['name'], 'birthDate' => $p['birth_date'],
             'identityNumber' => $p['identity_number'], 'gender' => $p['gender'] ?? 'M',
@@ -279,7 +299,6 @@ class TravelBookingController extends Controller
         }
 
         $d = $res['data'] ?? [];
-        $vendorPrice = (int) round(((float) $v['harga_dewasa']) * $adult + ((float) ($v['harga_anak'] ?? 0)) * $child + ((float) ($v['harga_infant'] ?? 0)) * $infant);
 
         $booking = $this->createRecord($request, [
             'moda'         => 'pelni',
@@ -287,7 +306,7 @@ class TravelBookingController extends Controller
             'destination'  => (string) $v['destination'],
             'origin_name'  => $v['pelabuhan_asal'],
             'destination_name' => $v['pelabuhan_tujuan'],
-            'depart_date'  => substr($v['departure_date'], 0, 4) . '-' . substr($v['departure_date'], 4, 2) . '-' . substr($v['departure_date'], 6, 2),
+            'depart_date'  => $departYmd,
             'depart_time'  => $d['departureTime'] ?? null,
             'arrive_time'  => $d['arrivalTime'] ?? null,
             'service_name' => $v['ship_name'],
@@ -295,12 +314,15 @@ class TravelBookingController extends Controller
             'pax'          => $payingPax + $infant,
             'vendor_price' => $vendorPrice,
             'markup'       => $markup,
-            'total_price'  => $vendorPrice + $markup * $payingPax,
+            'total_price'  => $total - $promoDiscount,
+            'promo_id'       => $promo?->id,
+            'promo_discount' => $promoDiscount,
             'vendor_transaction_id' => $d['transactionId'] ?? null,
             'time_limit'   => $d['payLimit'] ?? null,
             'passengers'   => $v['passengers'],
             'meta'         => ['book' => $d, 'paymentCode' => $d['paymentCode'] ?? ''],
         ]);
+        if ($promo) $promo->increment('used_count');
 
         return response()->json(['success' => true, 'data' => $booking], 201);
     }
@@ -312,6 +334,39 @@ class TravelBookingController extends Controller
             'code'    => TravelBooking::generateCode(),
             'status'  => 'pending_payment',
         ], $attrs));
+    }
+
+    /**
+     * Validasi kode promo untuk pembelian tiket (dipanggil SEBELUM booking vendor).
+     * Return [Promo|null, float discount]. Throw 422 kalau kode/kondisi tidak valid.
+     */
+    private function resolveTravelPromo(Request $request, string $moda, float $total, ?string $departDate): array
+    {
+        $code = trim((string) $request->input('promo_code', ''));
+        if ($code === '') return [null, 0.0];
+
+        $promo = \App\Models\Promo::where('code', $code)->active()->first();
+        if (!$promo) {
+            abort(response()->json(['success' => false, 'message' => 'Kode promo tidak valid atau sudah kadaluarsa.'], 422));
+        }
+        // Hanya promo platform (owner_id null) yang berlaku untuk tiket.
+        if ($promo->owner_id !== null) {
+            abort(response()->json(['success' => false, 'message' => 'Kode promo tidak berlaku untuk pembelian tiket.'], 422));
+        }
+        // Kondisi: product type = moda (pesawat/pelni/kereta), hari berlaku pakai tgl berangkat.
+        if ($err = $promo->conditionError(null, $departDate, $moda)) {
+            abort(response()->json(['success' => false, 'message' => $err], 422));
+        }
+        if ($promo->quota !== null && $promo->used_count >= $promo->quota) {
+            abort(response()->json(['success' => false, 'message' => 'Kuota promo sudah habis.'], 422));
+        }
+        if ($total < (float) $promo->min_purchase) {
+            abort(response()->json(['success' => false, 'message' => 'Minimum pembelian Rp ' . number_format($promo->min_purchase, 0, ',', '.') . ' untuk promo ini.'], 422));
+        }
+
+        $discount = round($promo->calculateDiscount($total), 2);
+        $discount = min($discount, $total); // jaga agar tidak melebihi total
+        return [$promo, $discount];
     }
 
     /* ── ADMIN: verifikasi transfer → terbitkan e-tiket ─────────────── */
