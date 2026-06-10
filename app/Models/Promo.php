@@ -11,6 +11,7 @@ class Promo extends Model
         'discount_type', 'discount_value',
         'min_purchase', 'max_discount', 'quota', 'used_count',
         'start_date', 'end_date', 'is_active', 'created_by', 'owner_id',
+        'day_type', 'hotel_types', 'location',
     ];
 
     protected $casts = [
@@ -20,6 +21,7 @@ class Promo extends Model
         'is_active' => 'boolean',
         'start_date' => 'datetime',
         'end_date' => 'datetime',
+        'hotel_types' => 'array',
     ];
 
     protected $attributes = [
@@ -103,5 +105,48 @@ class Promo extends Model
             : $this->discount_value;
 
         return $this->max_discount ? min($discount, $this->max_discount) : $discount;
+    }
+
+    /**
+     * Cek kondisi opsional promo (weekday/weekend, jenis akomodasi, lokasi).
+     * Return pesan error kalau TIDAK memenuhi, atau null kalau lolos/tidak ada kondisi.
+     * Kondisi yang kosong = tidak diterapkan.
+     */
+    public function conditionError(?Hotel $hotel, ?string $checkIn): ?string
+    {
+        // 1. Hari berlaku (weekday/weekend) — berdasarkan tanggal check-in.
+        if ($this->day_type && $checkIn) {
+            $dow       = \Carbon\Carbon::parse($checkIn)->dayOfWeek; // 0=Min .. 6=Sab
+            $isWeekend = in_array($dow, [0, 6], true);
+            if ($this->day_type === 'weekend' && !$isWeekend) {
+                return 'Promo ini hanya berlaku untuk check-in akhir pekan (Sabtu–Minggu).';
+            }
+            if ($this->day_type === 'weekday' && $isWeekend) {
+                return 'Promo ini hanya berlaku untuk check-in hari kerja (Senin–Jumat).';
+            }
+        }
+
+        // 2. Jenis akomodasi — cocokkan dengan kolom category hotel (case-insensitive).
+        $types = is_array($this->hotel_types) ? array_filter($this->hotel_types) : [];
+        if (!empty($types) && $hotel) {
+            $cat       = strtolower((string) $hotel->category);
+            $typeLower = array_map('strtolower', $types);
+            if (!in_array($cat, $typeLower, true)) {
+                return 'Promo ini hanya berlaku untuk jenis akomodasi: ' . implode(', ', $types) . '.';
+            }
+        }
+
+        // 3. Lokasi — cocokkan (sebagian, case-insensitive) dengan kota/area hotel.
+        if ($this->location && $hotel) {
+            $loc = strtolower(trim($this->location));
+            $hay = strtolower(implode(' ', array_filter([
+                $hotel->city, $hotel->district, $hotel->province, $hotel->address,
+            ])));
+            if ($loc !== '' && strpos($hay, $loc) === false) {
+                return 'Promo ini hanya berlaku untuk lokasi: ' . $this->location . '.';
+            }
+        }
+
+        return null;
     }
 }

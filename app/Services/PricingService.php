@@ -92,7 +92,7 @@ class PricingService
         //    agar konsisten dengan harga "discounted" di card kamar (yang juga
         //    dihitung dari base price, bukan subtotal).
         $hotelOwnerId = $room->hotel->owner_id ?? null;
-        [$promoDiscount, $promo] = $this->applyPromo($promoCode, $basePrice, $hotelOwnerId);
+        [$promoDiscount, $promo] = $this->applyPromo($promoCode, $basePrice, $hotelOwnerId, $room->hotel, $checkIn);
 
         // 2b. Auto-apply diskon yang di-follow owner (promo platform ATAU campaign)
         //     kalau user tidak masukkan kode manual. Diambil yang terbesar.
@@ -220,7 +220,7 @@ class PricingService
     /**
      * Validasi dan hitung diskon promo
      */
-    private function applyPromo(?string $code, float $amount, ?int $hotelOwnerId = null): array
+    private function applyPromo(?string $code, float $amount, ?int $hotelOwnerId = null, $hotel = null, ?string $checkIn = null): array
     {
         if (!$code) return [0, null];
 
@@ -233,6 +233,11 @@ class PricingService
         // Owner-scoped promo: only valid for that owner's hotels
         if ($promo->owner_id !== null && $promo->owner_id !== $hotelOwnerId) {
             throw new \InvalidArgumentException('Kode promo tidak berlaku untuk hotel ini.');
+        }
+
+        // Kondisi opsional (weekday/weekend, jenis akomodasi, lokasi)
+        if ($err = $promo->conditionError($hotel, $checkIn)) {
+            throw new \InvalidArgumentException($err);
         }
 
         if ($promo->quota !== null && $promo->used_count >= $promo->quota) {

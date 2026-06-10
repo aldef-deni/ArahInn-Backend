@@ -75,6 +75,7 @@ class PromoController extends Controller
             'code'     => 'required|string',
             'amount'   => 'required|numeric',
             'hotel_id' => 'nullable|integer',
+            'check_in' => 'nullable|date',
         ]);
 
         $promo = Promo::where('code', $data['code'])->active()->first();
@@ -83,12 +84,18 @@ class PromoController extends Controller
             return response()->json(['success' => false, 'message' => 'Kode promo tidak valid.'], 400);
         }
 
+        $hotel = isset($data['hotel_id']) ? Hotel::find($data['hotel_id']) : null;
+
         // Check owner scope
-        if ($promo->owner_id !== null && isset($data['hotel_id'])) {
-            $hotel = Hotel::find($data['hotel_id']);
-            if (!$hotel || $hotel->owner_id !== $promo->owner_id) {
+        if ($promo->owner_id !== null && $hotel) {
+            if ($hotel->owner_id !== $promo->owner_id) {
                 return response()->json(['success' => false, 'message' => 'Kode promo tidak berlaku untuk hotel ini.'], 400);
             }
+        }
+
+        // Kondisi opsional (weekday/weekend, jenis akomodasi, lokasi)
+        if ($err = $promo->conditionError($hotel, $data['check_in'] ?? null)) {
+            return response()->json(['success' => false, 'message' => $err], 400);
         }
 
         if ($promo->quota && $promo->used_count >= $promo->quota) {
@@ -202,6 +209,11 @@ class PromoController extends Controller
             'start_date'     => 'nullable|date',
             'end_date'       => 'nullable|date|after:start_date',
             'owner_id'       => 'nullable|integer|exists:users,id',
+            // Kondisi opsional
+            'day_type'       => 'nullable|in:weekday,weekend',
+            'hotel_types'    => 'nullable|array',
+            'hotel_types.*'  => 'string|max:50',
+            'location'       => 'nullable|string|max:255',
         ]);
 
         // Semua promo bertipe voucher (berlaku via kode di checkout).
@@ -244,13 +256,19 @@ class PromoController extends Controller
         }
 
         $allowed = ['name', 'description', 'discount_type', 'discount_value', 'min_purchase',
-                    'max_discount', 'quota', 'start_date', 'end_date', 'is_active'];
+                    'max_discount', 'quota', 'start_date', 'end_date', 'is_active',
+                    'day_type', 'hotel_types', 'location'];
 
         if ($user->hasAnyRole(['admin', 'superadmin'])) {
             $allowed[] = 'owner_id';
         }
 
         $updates = $request->only($allowed);
+
+        // Normalisasi kondisi kosong → null (tidak diterapkan)
+        if (array_key_exists('day_type', $updates) && !$updates['day_type']) $updates['day_type'] = null;
+        if (array_key_exists('location', $updates) && !$updates['location']) $updates['location'] = null;
+        if (array_key_exists('hotel_types', $updates) && empty($updates['hotel_types'])) $updates['hotel_types'] = null;
 
         // Upload image flyer kalau ada file baru (bypass Flysystem)
         if ($request->hasFile('image')) {
