@@ -102,18 +102,13 @@ class HotelController extends Controller
             if ($hotel->owner_id && $rooms->isNotEmpty()) {
                 $cheapest = $rooms->first();
                 $effective = $this->effectivePriceForRoom($cheapest, $priceDate);
-                $best = \App\Models\Promo::bestForOwner($hotel->owner_id, $effective);
+                $best = \App\Services\OwnerDiscountService::best($hotel->owner_id, $effective);
                 if ($best) {
                     $arr['min_price']         = $effective;
                     $arr['discounted_price']  = $best['final'];
                     $arr['discount_amount']   = $best['discount'];
-                    $arr['applied_promo']     = [
-                        'id'             => $best['promo']->id,
-                        'name'           => $best['promo']->name,
-                        'code'           => $best['promo']->code,
-                        'discount_type'  => $best['promo']->discount_type,
-                        'discount_value' => (float) $best['promo']->discount_value,
-                    ];
+                    $arr['discount_source']   = $best['source'];
+                    $arr['applied_promo']     = $best['applied'];
                 }
             }
             return $arr;
@@ -153,15 +148,10 @@ class HotelController extends Controller
                 $arr['default_price'] = (float) $room->base_price;  // simpan default original untuk referensi
 
                 if ($hotel->owner_id) {
-                    $best = \App\Models\Promo::bestForOwner($hotel->owner_id, $effective);
+                    $best = \App\Services\OwnerDiscountService::best($hotel->owner_id, $effective);
                     if ($best) {
-                        $arr['applied_promo']    = [
-                            'id'             => $best['promo']->id,
-                            'name'           => $best['promo']->name,
-                            'code'           => $best['promo']->code,
-                            'discount_type'  => $best['promo']->discount_type,
-                            'discount_value' => (float) $best['promo']->discount_value,
-                        ];
+                        $arr['applied_promo']    = $best['applied'];
+                        $arr['discount_source']  = $best['source'];
                         $arr['original_price']   = $effective;
                         $arr['discounted_price'] = $best['final'];
                         $arr['discount_amount']  = $best['discount'];

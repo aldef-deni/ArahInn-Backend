@@ -94,13 +94,15 @@ class PricingService
         $hotelOwnerId = $room->hotel->owner_id ?? null;
         [$promoDiscount, $promo] = $this->applyPromo($promoCode, $basePrice, $hotelOwnerId);
 
-        // 2b. Auto-apply promo platform yang di-follow owner kalau user tidak
-        //     masukkan kode manual.
+        // 2b. Auto-apply diskon yang di-follow owner (promo platform ATAU campaign)
+        //     kalau user tidak masukkan kode manual. Diambil yang terbesar.
+        $campaign = null;
         if (!$promo && $hotelOwnerId) {
-            $best = \App\Models\Promo::bestForOwner($hotelOwnerId, $basePrice);
+            $best = \App\Services\OwnerDiscountService::best($hotelOwnerId, $basePrice);
             if ($best) {
                 $promoDiscount = $best['discount'];
-                $promo         = $best['promo'];
+                $promo         = $best['promo'];      // null kalau sumbernya campaign
+                $campaign      = $best['campaign'];   // null kalau sumbernya promo
             }
         }
         $basePrice = round(max(0, $basePrice - $promoDiscount), 2);
@@ -144,6 +146,7 @@ class PricingService
             'price_suffix'     => $priceSuffix,
             'total_price'      => $totalPrice,
             'promo'            => $promo,
+            'campaign'         => $campaign,
             'rate_plan'        => $ratePlan ? [
                 'id'                 => $ratePlan->id,
                 'name'                => $ratePlan->name,

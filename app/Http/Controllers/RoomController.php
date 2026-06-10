@@ -138,17 +138,12 @@ class RoomController extends Controller
                 'effective_price'  => $effective,
             ]);
 
-            // Tempel info promo platform yang diikuti owner (jika ada)
+            // Tempel info diskon yang diikuti owner (promo platform ATAU campaign)
             if ($ownerId) {
-                $best = Promo::bestForOwner($ownerId, $effective);
+                $best = \App\Services\OwnerDiscountService::best($ownerId, $effective);
                 if ($best) {
-                    $payload['applied_promo']    = [
-                        'id'             => $best['promo']->id,
-                        'name'           => $best['promo']->name,
-                        'code'           => $best['promo']->code,
-                        'discount_type'  => $best['promo']->discount_type,
-                        'discount_value' => (float) $best['promo']->discount_value,
-                    ];
+                    $payload['applied_promo']    = $best['applied'];
+                    $payload['discount_source']  = $best['source'];
                     $payload['original_price']   = $effective;
                     $payload['discounted_price'] = $best['final'];
                     $payload['discount_amount']  = $best['discount'];
