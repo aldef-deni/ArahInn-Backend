@@ -383,6 +383,19 @@ class PpobService
             return;
         }
 
+        // RC bukan 68 tapi pesan vendor "SEDANG DIPROSES" dsb → perlakukan sebagai
+        // PENDING (tunggu callback), JANGAN refundable. Cegah refund prematur →
+        // double-payout kalau ternyata transaksi tetap diselesaikan vendor.
+        if (RajaBillerService::isProcessingMessage($rawResp['status'] ?? null)) {
+            $trx->update(['status' => 'processing']);
+            Log::warning('PPOB rc-failure tapi pesan vendor indikasi diproses — tahan sbg processing', [
+                'trx_code' => $trx->trx_code,
+                'rc'       => $rc,
+                'message'  => $rawResp['status'] ?? null,
+            ]);
+            return;
+        }
+
         // RC failure → mark failed + refundable
         $trx->update([
             'status'         => 'refundable',
@@ -450,6 +463,14 @@ class PpobService
         if (RajaBillerService::isSuccess($rc)) {
             $trx->update(['status' => 'success', 'completed_at' => now()]);
             $this->notifyCustomerSuccess($trx);
+        } elseif (RajaBillerService::isProcessingMessage($payload['status'] ?? null)) {
+            // Vendor masih memproses → tetap processing, tunggu callback final.
+            $trx->update(['status' => 'processing']);
+            Log::warning('PPOB callback rc-failure tapi pesan indikasi diproses — tahan sbg processing', [
+                'trx_code' => $trx->trx_code,
+                'rc'       => $rc,
+                'message'  => $payload['status'] ?? null,
+            ]);
         } elseif (RajaBillerService::isFailed($rc)) {
             $trx->update([
                 'status'         => 'refundable',

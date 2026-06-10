@@ -295,6 +295,23 @@ class RajaBillerService
     }
 
     /**
+     * Deteksi pesan vendor yang MENGINDIKASIKAN transaksi masih diproses
+     * (walau RC bukan 68). Dipakai untuk mencegah refund prematur → double-payout.
+     * Sengaja pakai frasa SPESIFIK supaya tidak salah-tangkap pesan gagal seperti
+     * "tidak dapat diproses".
+     */
+    public static function isProcessingMessage(?string $message): bool
+    {
+        if (!$message) return false;
+        $m = strtoupper($message);
+        foreach (['SEDANG DIPROSES', 'SEDANG PROSES', 'DALAM PROSES', 'MASIH DIPROSES',
+                  'MASIH PROSES', 'PENDING', 'MENUNGGU', 'IN PROCESS', 'PROCESSING'] as $needle) {
+            if (str_contains($m, $needle)) return true;
+        }
+        return false;
+    }
+
+    /**
      * Map RC ke user-friendly message untuk display di UI.
      */
     public static function userMessage(?string $rc): string
