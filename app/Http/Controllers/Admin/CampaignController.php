@@ -66,11 +66,16 @@ class CampaignController extends Controller
     public function myList(Request $request)
     {
         $userId = $request->user()->id;
+        // Campaign yang dibuat admin/superadmin WAJIB masuk ke SEMUA owner (untuk
+        // dipilih ikut/tidak). Plus campaign global (owner_id null) & yang ditarget
+        // ke owner ini.
+        $adminIds = \App\Models\User::role(['admin', 'superadmin'])->pluck('id');
         $campaigns = Campaign::with('owner:id,name,email')
             ->where('status', 'active')
-            ->where(function ($q) use ($userId) {
+            ->where(function ($q) use ($userId, $adminIds) {
                 $q->whereNull('owner_id')
-                  ->orWhere('owner_id', $userId);
+                  ->orWhere('owner_id', $userId)
+                  ->orWhereIn('created_by', $adminIds);
             })
             ->latest()
             ->get();
