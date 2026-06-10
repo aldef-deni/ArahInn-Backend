@@ -98,9 +98,11 @@ class CampaignController extends Controller
             'discount_percent' => 'nullable|numeric|min:0|max:100',
             'description'      => 'nullable|string',
             'image'            => 'nullable|file|max:4096',
+            'banner'           => 'required|file|max:6144',   // banner landscape WAJIB
         ]);
 
-        $this->assertValidImage($request);
+        $this->assertValidImage($request, 'image');
+        $this->assertValidImage($request, 'banner');
 
         // type bisa multi (banner/popup) → simpan sebagai "banner,popup"
         $data['type']             = implode(',', $data['type']);
@@ -111,6 +113,9 @@ class CampaignController extends Controller
 
         if ($request->hasFile('image')) {
             $data['image'] = $this->storeImageLocally($request->file('image'));
+        }
+        if ($request->hasFile('banner')) {
+            $data['banner'] = $this->storeImageLocally($request->file('banner'));
         }
 
         $campaign = Campaign::create($data);
@@ -132,21 +137,29 @@ class CampaignController extends Controller
             'discount_percent' => 'nullable|numeric|min:0|max:100',
             'description'      => 'nullable|string',
             'image'            => 'nullable|file|max:4096',
+            'banner'           => 'nullable|file|max:6144',
         ]);
 
-        $this->assertValidImage($request);
+        $this->assertValidImage($request, 'image');
+        $this->assertValidImage($request, 'banner');
 
         if (isset($data['type'])) {
             $data['type'] = implode(',', $data['type']);
         }
 
         if ($request->hasFile('image')) {
-            // Hapus image lama langsung dari filesystem
             if ($campaign->image) {
                 $oldPath = storage_path('app/public/' . $campaign->image);
                 if (is_file($oldPath)) @unlink($oldPath);
             }
             $data['image'] = $this->storeImageLocally($request->file('image'));
+        }
+        if ($request->hasFile('banner')) {
+            if ($campaign->banner) {
+                $oldPath = storage_path('app/public/' . $campaign->banner);
+                if (is_file($oldPath)) @unlink($oldPath);
+            }
+            $data['banner'] = $this->storeImageLocally($request->file('banner'));
         }
 
         $campaign->update($data);
@@ -160,10 +173,10 @@ class CampaignController extends Controller
     }
 
     // ── Validasi ekstensi image manual (server tanpa ext fileinfo) ────────
-    private function assertValidImage(Request $request): void
+    private function assertValidImage(Request $request, string $field = 'image'): void
     {
-        if ($request->hasFile('image')) {
-            $ext = strtolower($request->file('image')->getClientOriginalExtension());
+        if ($request->hasFile($field)) {
+            $ext = strtolower($request->file($field)->getClientOriginalExtension());
             if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
                 abort(response()->json([
                     'success' => false,
