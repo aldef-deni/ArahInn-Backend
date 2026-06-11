@@ -62,7 +62,9 @@ class PricingService
             'room_count' => $roomCount,
         ] = array_merge(['promo_code' => null, 'user_id' => null, 'use_points' => false, 'room_count' => 1], $params);
 
-        $room      = Room::with('hotel:id,owner_id,commission_percent')->findOrFail($roomId);
+        // Sertakan kolom category + lokasi → dibutuhkan untuk cek KONDISI promo
+        // (jenis akomodasi & lokasi). Tanpa ini category null → promo selalu ditolak.
+        $room      = Room::with('hotel:id,owner_id,commission_percent,category,city,district,province,address')->findOrFail($roomId);
         $roomCount = max(1, (int) $roomCount);
         $ciDate    = Carbon::parse($checkIn);
         $coDate    = Carbon::parse($checkOut);
