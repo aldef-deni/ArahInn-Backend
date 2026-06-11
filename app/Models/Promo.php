@@ -141,8 +141,18 @@ class Promo extends Model
         // 2. Jenis akomodasi — cocokkan dengan kolom category hotel (case-insensitive).
         $types = is_array($this->hotel_types) ? array_filter($this->hotel_types) : [];
         if (!empty($types) && $hotel) {
-            $cat       = strtolower((string) $hotel->category);
-            $typeLower = array_map('strtolower', $types);
+            // Normalisasi: lowercase, trim, samakan sinonim ID/EN (Apartemen=Apartment, dll)
+            $norm = function ($s) {
+                $s = strtolower(trim((string) $s));
+                $syn = [
+                    'apartemen' => 'apartment', 'apartement' => 'apartment',
+                    'kos' => 'kosan', 'guesthouse' => 'guest house',
+                    'wisma' => 'guest house', 'penginapan' => 'guest house',
+                ];
+                return $syn[$s] ?? $s;
+            };
+            $cat       = $norm($hotel->category);
+            $typeLower = array_map($norm, $types);
             if (!in_array($cat, $typeLower, true)) {
                 return 'Promo ini hanya berlaku untuk jenis akomodasi: ' . implode(', ', $types) . '.';
             }
