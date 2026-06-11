@@ -92,20 +92,25 @@ class PricingService
         //    agar konsisten dengan harga "discounted" di card kamar (yang juga
         //    dihitung dari base price, bukan subtotal).
         $hotelOwnerId = $room->hotel->owner_id ?? null;
-        [$promoDiscount, $promo] = $this->applyPromo($promoCode, $basePrice, $hotelOwnerId, $room->hotel, $checkIn);
 
-        // 2b. Auto-apply diskon yang di-follow owner (promo platform ATAU campaign)
-        //     kalau user tidak masukkan kode manual. Diambil yang terbesar.
+        // 2a. Diskon CAMPAIGN otomatis (owner mengikuti campaign / promo platform) —
+        //     SELALU dihitung, tidak hilang walau ada kode promo manual.
+        $campaignDiscount = 0;
         $campaign = null;
-        if (!$promo && $hotelOwnerId) {
+        if ($hotelOwnerId) {
             $best = \App\Services\OwnerDiscountService::best($hotelOwnerId, $basePrice);
             if ($best) {
-                $promoDiscount = $best['discount'];
-                $promo         = $best['promo'];      // null kalau sumbernya campaign
-                $campaign      = $best['campaign'];   // null kalau sumbernya promo
+                $campaignDiscount = $best['discount'];
+                $campaign         = $best['campaign'];  // null kalau sumbernya promo-follow
             }
         }
-        $basePrice = round(max(0, $basePrice - $promoDiscount), 2);
+
+        // 2b. Diskon KODE PROMO manual (kalau ada) — DI-STACK di atas diskon campaign.
+        [$codeDiscount, $promo] = $this->applyPromo($promoCode, $basePrice, $hotelOwnerId, $room->hotel, $checkIn);
+
+        // Total diskon = campaign + kode, dibatasi agar tidak melebihi harga.
+        $promoDiscount = min($campaignDiscount + $codeDiscount, $originalBasePrice);
+        $basePrice = round(max(0, $originalBasePrice - $promoDiscount), 2);
 
         // 3. Markup "Pajak & Others" = komisi properti + 2% PPh
         //    Dihitung dari base price POST-promo, jadi customer dapat manfaat
@@ -140,7 +145,9 @@ class PricingService
             'original_base_price'   => round($originalBasePrice, 2),  // sebelum diskon promo
             'base_price'            => round($basePrice, 2),           // setelah diskon promo
             'markup_amount'         => round($markupAmount, 2),
-            'promo_discount'        => round($promoDiscount, 2),
+            'promo_discount'        => round($promoDiscount, 2),    // total (campaign + kode)
+            'campaign_discount'     => round($campaignDiscount, 2), // bagian dari campaign
+            'code_discount'         => round($codeDiscount, 2),     // bagian dari kode promo
             'loyalty_discount' => round($loyaltyDiscount, 2),
             'tax_amount'       => round($taxAmount, 2),
             'price_suffix'     => $priceSuffix,
