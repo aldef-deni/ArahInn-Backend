@@ -67,7 +67,7 @@ class TravelBookingController extends Controller
         // Hitung total + validasi promo SEBELUM booking vendor (hindari booking sia-sia)
         $vendorPrice = (int) round(((float) $v['price_adult']) * $adult);
         $total       = $vendorPrice + $markup * $adult;
-        [$promo, $promoDiscount] = $this->resolveTravelPromo($request, 'kereta', (float) $total, $v['date']);
+        [$promo, $promoDiscount] = $this->resolveTravelPromo($request->input('promo_code'), 'kereta', (float) $total, $v['date']);
 
         $res = $this->travel->bookTrain([
             'origin'           => strtoupper($v['origin']),
@@ -164,7 +164,7 @@ class TravelBookingController extends Controller
         // Hitung total + validasi promo SEBELUM booking vendor
         $vendorPrice = (int) round(((float) $v['price']) * $payingPax);
         $total       = $vendorPrice + $markup * $payingPax;
-        [$promo, $promoDiscount] = $this->resolveTravelPromo($request, 'pesawat', (float) $total, $v['departure_date']);
+        [$promo, $promoDiscount] = $this->resolveTravelPromo($request->input('promo_code'), 'pesawat', (float) $total, $v['departure_date']);
 
         $mapPax = fn($p) => [
             'title' => $p['title'] ?? 'MR', 'firstName' => $p['first_name'] ?? '',
@@ -262,7 +262,7 @@ class TravelBookingController extends Controller
         $vendorPrice = (int) round(((float) $v['harga_dewasa']) * $adult + ((float) ($v['harga_anak'] ?? 0)) * $child + ((float) ($v['harga_infant'] ?? 0)) * $infant);
         $total       = $vendorPrice + $markup * $payingPax;
         $departYmd   = substr($v['departure_date'], 0, 4) . '-' . substr($v['departure_date'], 4, 2) . '-' . substr($v['departure_date'], 6, 2);
-        [$promo, $promoDiscount] = $this->resolveTravelPromo($request, 'pelni', (float) $total, $departYmd);
+        [$promo, $promoDiscount] = $this->resolveTravelPromo($request->input('promo_code'), 'pelni', (float) $total, $departYmd);
 
         $mapPax = fn($p) => [
             'name' => $p['name'], 'birthDate' => $p['birth_date'],
@@ -340,9 +340,9 @@ class TravelBookingController extends Controller
      * Validasi kode promo untuk pembelian tiket (dipanggil SEBELUM booking vendor).
      * Return [Promo|null, float discount]. Throw 422 kalau kode/kondisi tidak valid.
      */
-    private function resolveTravelPromo(Request $request, string $moda, float $total, ?string $departDate): array
+    private function resolveTravelPromo(?string $code, string $moda, float $total, ?string $departDate): array
     {
-        $code = trim((string) $request->input('promo_code', ''));
+        $code = trim((string) $code);
         if ($code === '') return [null, 0.0];
 
         $promo = \App\Models\Promo::where('code', $code)->active()->first();
@@ -367,6 +367,33 @@ class TravelBookingController extends Controller
         $discount = round($promo->calculateDiscount($total), 2);
         $discount = min($discount, $total); // jaga agar tidak melebihi total
         return [$promo, $discount];
+    }
+
+    /**
+     * Preview kode promo tiket (untuk tombol "Gunakan" di FE) — tanpa booking.
+     * POST /travel/promo/validate
+     */
+    public function validatePromo(Request $request)
+    {
+        $v = $request->validate([
+            'code'        => 'required|string',
+            'moda'        => 'required|in:pesawat,pelni,kereta',
+            'total'       => 'required|numeric|min:0',
+            'depart_date' => 'nullable|date',
+        ]);
+
+        // resolveTravelPromo akan abort 422 dgn pesan jelas kalau tidak valid/kondisi gagal.
+        [$promo, $discount] = $this->resolveTravelPromo($v['code'], $v['moda'], (float) $v['total'], $v['depart_date'] ?? null);
+
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                'code'     => $promo->code,
+                'name'     => $promo->name,
+                'discount' => $discount,
+                'final'    => max(0, round($v['total'] - $discount, 2)),
+            ],
+        ]);
     }
 
     /* ── ADMIN: verifikasi transfer → terbitkan e-tiket ─────────────── */

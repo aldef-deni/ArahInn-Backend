@@ -509,6 +509,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // ── Travel BOOKING + PAYMENT (checkout → pay → e-tiket) ───────────
     Route::prefix('travel')->group(function () {
         Route::post('/checkout',           [\App\Http\Controllers\TravelBookingController::class, 'checkout']);
+        Route::post('/promo/validate',     [\App\Http\Controllers\TravelBookingController::class, 'validatePromo']);
         Route::get('/bookings',            [\App\Http\Controllers\TravelBookingController::class, 'myBookings']);
         Route::get('/bookings/{id}',       [\App\Http\Controllers\TravelBookingController::class, 'show']);
         Route::get('/bookings/{id}/etiket', [\App\Http\Controllers\TravelBookingController::class, 'downloadEtiket']);
