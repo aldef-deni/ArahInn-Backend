@@ -234,6 +234,9 @@ class HotelController extends Controller
             }
         }
 
+        // Foto utama (thumbnail kartu) → pindahkan ke index 0
+        $hotelImages = $this->applyPrimaryImage($hotelImages, $request->input('primary_index'));
+
         // Docs
         $npwpDoc     = $upload($request->file('npwp_doc'),         'uploads/docs');
         $nituDoc     = $upload($request->file('nitku_doc'),        'uploads/docs');
@@ -512,6 +515,9 @@ class HotelController extends Controller
             }
         }
 
+        // Foto utama (thumbnail kartu) → pindahkan ke index 0
+        $hotelImages = $this->applyPrimaryImage($hotelImages, $request->input('primary_index'));
+
         // ── Docs ──
         $npwpDoc     = $request->file('npwp_doc')         ? $upload($request->file('npwp_doc'),         'uploads/docs') : null;
         $nituDoc     = $request->file('nitku_doc')        ? $upload($request->file('nitku_doc'),        'uploads/docs') : null;
@@ -688,6 +694,21 @@ class HotelController extends Controller
             'warnings' => $uploadWarnings,
             'data'     => $hotel->fresh()->load('rooms'),
         ]);
+    }
+
+    /**
+     * Pindahkan foto pada $index ke posisi pertama (jadi thumbnail kartu = images[0]).
+     * $index = posisi foto utama di array gabungan (existing + upload baru).
+     */
+    private function applyPrimaryImage(array $images, $index): array
+    {
+        if ($index === null || $index === '') return $images;
+        $i = (int) $index;
+        if ($i <= 0 || !isset($images[$i])) return $images; // 0 atau invalid → tidak perlu geser
+        $primary = $images[$i];
+        unset($images[$i]);
+        array_unshift($images, $primary);
+        return array_values($images);
     }
 
     /** Pesan error upload yang jelas untuk ditampilkan ke user. */
