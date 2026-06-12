@@ -68,6 +68,25 @@ class PromoController extends Controller
         return response()->json(['success' => true, 'data' => $promos]);
     }
 
+    // ── Public: voucher owner aktif untuk sebuah properti (tampil di detail hotel) ──
+    public function hotelPromos($hotelId)
+    {
+        $hotel = \App\Models\Hotel::find($hotelId);
+        if (!$hotel || !$hotel->owner_id) {
+            return response()->json(['success' => true, 'data' => []]);
+        }
+
+        $promos = Promo::active()
+            ->where('owner_id', $hotel->owner_id)
+            ->where(fn($q) => $q->whereNull('hotel_id')->orWhere('hotel_id', $hotel->id))
+            ->where(fn($q) => $q->whereNull('quota')->orWhereColumn('used_count', '<', 'quota'))
+            ->orderByDesc('created_at')
+            ->get(['id', 'code', 'name', 'description', 'discount_type', 'discount_value',
+                   'min_purchase', 'max_discount', 'end_date', 'quota', 'used_count']);
+
+        return response()->json(['success' => true, 'data' => $promos]);
+    }
+
     // ── Public: validate promo code at checkout ───────────────────────────
     public function validate(Request $request)
     {
@@ -86,11 +105,14 @@ class PromoController extends Controller
 
         $hotel = isset($data['hotel_id']) ? Hotel::find($data['hotel_id']) : null;
 
-        // Check owner scope
-        if ($promo->owner_id !== null && $hotel) {
-            if ($hotel->owner_id !== $promo->owner_id) {
-                return response()->json(['success' => false, 'message' => 'Kode promo tidak berlaku untuk hotel ini.'], 400);
-            }
+        // Check owner scope (cast int — hindari mismatch tipe string vs int)
+        if ($promo->owner_id !== null && $hotel && (int) $hotel->owner_id !== (int) $promo->owner_id) {
+            return response()->json(['success' => false, 'message' => 'Kode promo tidak berlaku untuk hotel ini.'], 400);
+        }
+
+        // Check hotel scope (promo yang dibatasi ke 1 properti)
+        if ($promo->hotel_id !== null && $hotel && (int) $promo->hotel_id !== (int) $hotel->id) {
+            return response()->json(['success' => false, 'message' => 'Kode promo hanya berlaku untuk properti tertentu.'], 400);
         }
 
         // Kondisi opsional (weekday/weekend, jenis akomodasi, lokasi)
@@ -216,6 +238,7 @@ class PromoController extends Controller
             'location'        => 'nullable|string|max:255',
             'product_types'   => 'nullable|array',
             'product_types.*' => 'in:accommodation,pesawat,pelni,kereta',
+            'hotel_id'        => 'nullable|integer|exists:hotels,id', // null = semua properti
         ]);
 
         // Semua promo bertipe voucher (berlaku via kode di checkout).
@@ -236,6 +259,16 @@ class PromoController extends Controller
             $data['owner_id'] = $data['owner_id'] ?? null;
         } else {
             $data['owner_id'] = $user->id;
+        }
+
+        // hotel_id (opsional): null = semua properti. Kalau diisi owner, wajib
+        // properti miliknya sendiri.
+        if (!empty($data['hotel_id']) && !$isAdmin) {
+            $ownsHotel = \App\Models\Hotel::where('id', $data['hotel_id'])
+                ->where('owner_id', $user->id)->exists();
+            if (!$ownsHotel) {
+                return response()->json(['success' => false, 'message' => 'Properti tidak valid / bukan milik Anda.'], 422);
+            }
         }
 
         // Upload image flyer kalau ada (bypass Flysystem — server tanpa ext fileinfo)

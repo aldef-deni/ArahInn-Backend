@@ -89,6 +89,7 @@ Route::get('/hotels/my-hotels', [HotelController::class, 'myHotels'])
 Route::prefix('hotels')->group(function () {
     Route::get('/search',            [HotelController::class, 'search']);
     Route::get('/cities',            [HotelController::class, 'cities']);
+    Route::get('/popular-destinations', [HotelController::class, 'popularDestinations']);
     Route::get('/{id}',              [HotelController::class, 'show']);
     Route::get('/{id}/rooms',        [RoomController::class, 'byHotel']);
     Route::get('/{id}/availability', [RoomController::class, 'availability']);
@@ -101,6 +102,7 @@ Route::prefix('promos')->group(function () {
     Route::get('/active',      [PromoController::class, 'active']);
     Route::get('/flash-sales', [PromoController::class, 'flashSales']);
     Route::get('/flyers',      [PromoController::class, 'flyers']);
+    Route::get('/hotel/{hotelId}', [PromoController::class, 'hotelPromos']); // voucher owner utk properti
 });
 
 // ── Campaigns (Public: campaign platform aktif untuk ditampilkan di home) ──
@@ -280,24 +282,27 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('promos')->group(function () {
         Route::post('/validate', [PromoController::class, 'validate']);
 
-        // Owner: manage own promos + view own promo list
+        // Owner-only: list promo sendiri + follow promo platform
         Route::middleware('role:owner')->group(function () {
             Route::get('/my',                 [PromoController::class, 'myPromos']);
             Route::get('/platform',           [PromoController::class, 'platformPromos']);
             Route::post('/{id}/follow',       [PromoController::class, 'follow']);
             Route::delete('/{id}/follow',     [PromoController::class, 'unfollow']);
-            Route::post('/',                  [PromoController::class, 'store']);
-            Route::put('/{id}',               [PromoController::class, 'update']);
-            Route::delete('/{id}',            [PromoController::class, 'destroy']);
         });
 
-        // Admin: manage all promos + owners list for dropdown
+        // Admin-only: lihat semua promo + dropdown owner
         Route::middleware('role:admin|superadmin')->group(function () {
             Route::get('/',           [PromoController::class, 'index']);
+            Route::get('/owners-list',[PromoController::class, 'ownersList']);
+        });
+
+        // Shared: create/update/delete. Controller PromoController otomatis set
+        // owner_id sesuai role (owner → promo miliknya; admin → dari request).
+        // Digabung supaya tidak saling menimpa (dulu route admin menutup route owner → owner 403).
+        Route::middleware('role:owner|admin|superadmin')->group(function () {
             Route::post('/',          [PromoController::class, 'store']);
             Route::put('/{id}',       [PromoController::class, 'update']);
             Route::delete('/{id}',    [PromoController::class, 'destroy']);
-            Route::get('/owners-list',[PromoController::class, 'ownersList']);
         });
 
         // Loyalty

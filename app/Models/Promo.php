@@ -10,7 +10,7 @@ class Promo extends Model
         'code', 'type', 'name', 'description', 'image',
         'discount_type', 'discount_value',
         'min_purchase', 'max_discount', 'quota', 'used_count',
-        'start_date', 'end_date', 'is_active', 'created_by', 'owner_id',
+        'start_date', 'end_date', 'is_active', 'created_by', 'owner_id', 'hotel_id',
         'day_type', 'hotel_types', 'location', 'product_types',
     ];
 

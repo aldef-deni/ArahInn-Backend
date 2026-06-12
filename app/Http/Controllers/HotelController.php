@@ -25,6 +25,23 @@ class HotelController extends Controller
         return (float) ($override ?? $room->base_price);
     }
 
+    /**
+     * Destinasi populer — kota dengan jumlah akomodasi terbanyak yang sudah
+     * bergabung (status approved). Untuk dropdown search di home.
+     */
+    public function popularDestinations(Request $request)
+    {
+        $cities = Hotel::approved()
+            ->selectRaw('city, province, COUNT(*) as hotel_count')
+            ->whereNotNull('city')->where('city', '!=', '')
+            ->groupBy('city', 'province')
+            ->orderByDesc('hotel_count')
+            ->limit((int) ($request->limit ?? 8))
+            ->get();
+
+        return response()->json(['success' => true, 'data' => $cities]);
+    }
+
     public function search(Request $request)
     {
         $query = Hotel::approved()
@@ -67,7 +84,17 @@ class HotelController extends Controller
                 $query->whereJsonContains('facilities', $facility);
             }
         }
-        if ($sortBy = $request->sort_by) {
+        // "Dekat saya" — kalau ada koordinat customer, urutkan dari yang terdekat
+        $hasGeo = $request->filled('lat') && $request->filled('lng');
+        if ($hasGeo) {
+            $lat = (float) $request->lat;
+            $lng = (float) $request->lng;
+            $hav = "(6371 * acos(LEAST(1, cos(radians($lat)) * cos(radians(latitude))"
+                 . " * cos(radians(longitude) - radians($lng)) + sin(radians($lat)) * sin(radians(latitude)))))";
+            $query->whereNotNull('latitude')->whereNotNull('longitude')
+                  ->addSelect(\Illuminate\Support\Facades\DB::raw("$hav AS distance_km"))
+                  ->orderBy('distance_km');
+        } elseif ($sortBy = $request->sort_by) {
             match ($sortBy) {
                 'price_asc'  => $query->withMin('rooms', 'base_price')->orderBy('rooms_min_base_price'),
                 'price_desc' => $query->withMin('rooms', 'base_price')->orderByDesc('rooms_min_base_price'),

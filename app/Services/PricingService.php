@@ -260,9 +260,14 @@ class PricingService
             throw new \InvalidArgumentException('Kode promo tidak valid atau sudah kadaluarsa.');
         }
 
-        // Owner-scoped promo: only valid for that owner's hotels
-        if ($promo->owner_id !== null && $promo->owner_id !== $hotelOwnerId) {
+        // Owner-scoped promo: only valid for that owner's hotels (cast int)
+        if ($promo->owner_id !== null && (int) $promo->owner_id !== (int) $hotelOwnerId) {
             throw new \InvalidArgumentException('Kode promo tidak berlaku untuk hotel ini.');
+        }
+
+        // Hotel-scoped promo: kalau promo dibatasi ke 1 properti, hanya berlaku di properti itu
+        if ($promo->hotel_id !== null && $hotel && (int) $promo->hotel_id !== (int) $hotel->id) {
+            throw new \InvalidArgumentException('Kode promo hanya berlaku untuk properti tertentu.');
         }
 
         // Kondisi opsional (weekday/weekend, jenis akomodasi, lokasi)
