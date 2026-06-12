@@ -121,6 +121,23 @@ class PricingService
         $markupAmount  = round($basePrice * $markupPercent, 2);
         $subtotal      = $basePrice + $markupAmount;
 
+        // ── Skema BEBAN DISKON (untuk laporan komisi/laba) ──────────────────
+        // Siapa bikin diskon, dia yang nanggung. Harga customer TIDAK berubah.
+        //   D_a = diskon ArahInn (campaign + promo owner_id NULL)
+        //   D_o = diskon owner   (promo owner_id terisi)
+        //   owner_payout      = N − D_o*(1+m)        → owner cuma nanggung diskonnya
+        //   commission_profit = N*c − D_a*(1+m)      → ArahInn nanggung diskonnya (bisa minus = nalangin)
+        // N = originalBasePrice (sebelum promo), m = markup, c = komisi murni (m − 2% PPh)
+        $promoIsOwner = $promo && $promo->owner_id !== null;
+        $rawDiscTotal = $campaignDiscount + $codeDiscount;
+        $discScale    = $rawDiscTotal > 0 ? ($promoDiscount / $rawDiscTotal) : 0; // ≤1 bila ke-cap
+        $discountOwner   = round(($promoIsOwner ? $codeDiscount : 0) * $discScale, 2);
+        $discountArahinn = round(($campaignDiscount + ($promoIsOwner ? 0 : $codeDiscount)) * $discScale, 2);
+
+        $commissionFrac   = max(0, $markupPercent - (self::PPH_PERCENT / 100)); // komisi murni
+        $ownerPayout      = round(max(0, $originalBasePrice - $discountOwner * (1 + $markupPercent)), 2);
+        $commissionProfit = round($originalBasePrice * $commissionFrac - $discountArahinn * (1 + $markupPercent), 2);
+
         // Kept for compatibility (occupancy_rate masih dilaporkan di breakdown)
         $occupancyRate = $this->getOccupancyRate($roomId, $checkIn, $checkOut, $room->total_units);
 
@@ -150,6 +167,10 @@ class PricingService
             'promo_discount'        => round($promoDiscount, 2),    // total (campaign + kode)
             'campaign_discount'     => round($campaignDiscount, 2), // bagian dari campaign
             'code_discount'         => round($codeDiscount, 2),     // bagian dari kode promo
+            'discount_arahinn'      => $discountArahinn,            // diskon yang ditanggung ArahInn
+            'discount_owner'        => $discountOwner,              // diskon yang ditanggung owner
+            'owner_payout'          => $ownerPayout,                // diterima owner (skema beban)
+            'commission_profit'     => $commissionProfit,           // laba komisi ArahInn (skema beban)
             'loyalty_discount' => round($loyaltyDiscount, 2),
             'tax_amount'       => round($taxAmount, 2),
             'price_suffix'     => $priceSuffix,

@@ -30,7 +30,9 @@ class DashboardController extends Controller
         // pembayaran settlement, kecuali booking refunded/canceled.
         // Konsisten dengan ReportController::profit & halaman Laba Platform.
         $pphRate    = 0.02;
-        $profitExpr = "GREATEST(bookings.markup_amount - (bookings.base_price * {$pphRate}), 0)";
+        // Pakai commission_profit (skema beban diskon, bisa minus karena nalangin promo
+        // ArahInn) bila ada; fallback ke rumus lama untuk booking historis.
+        $profitExpr = "COALESCE(bookings.commission_profit, GREATEST(bookings.markup_amount - (bookings.base_price * {$pphRate}), 0))";
         $commBase   = fn() => DB::table('payments')
             ->join('bookings', 'bookings.id', '=', 'payments.booking_id')
             ->where('payments.status', 'settlement')

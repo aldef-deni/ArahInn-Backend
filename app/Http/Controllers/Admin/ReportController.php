@@ -108,7 +108,8 @@ class ReportController extends Controller
             ->whereHas('booking', fn($q) => $q->whereNotIn('status', ['refunded', 'canceled']))
             ->with(['booking' => fn($q) => $q->select(
                 'id', 'booking_code', 'guest_name', 'hotel_id',
-                'base_price', 'markup_amount', 'total_price', 'status', 'created_at'
+                'base_price', 'markup_amount', 'total_price', 'status', 'created_at',
+                'discount_arahinn', 'discount_owner', 'owner_payout', 'commission_profit'
             )->with('hotel:id,name,city,owner_id')])
             ->orderByRaw('COALESCE(paid_at, created_at) asc');
 
@@ -123,15 +124,22 @@ class ReportController extends Controller
 
         $payments = $query->get()->filter(fn($p) => $p->booking); // buang payment tanpa booking
 
-        // Laba komisi per booking
+        // Laba komisi per booking. Pakai field skema-beban (owner_payout, commission_profit)
+        // bila ada; fallback ke rumus lama untuk booking historis (kolom null).
         $rows = $payments->map(function ($p) use ($pphRate) {
             $b      = $p->booking;
             $base   = (float) $b->base_price;
             $markup = (float) $b->markup_amount;
             $pph    = round($base * $pphRate, 2);
-            $profit = round(max(0, $markup - $pph), 2);  // laba komisi murni
-            $pct    = $base > 0 ? round($profit / $base * 100, 1) : 0;
-            $date   = ($p->paid_at ?? $p->created_at);
+
+            // Laba ArahInn: commission_profit (bisa minus karena nalangin promo ArahInn)
+            $profit = $b->commission_profit !== null
+                ? round((float) $b->commission_profit, 2)
+                : round(max(0, $markup - $pph), 2);
+            // Pendapatan owner (netto setelah beban diskonnya sendiri)
+            $ownerRev = $b->owner_payout !== null ? round((float) $b->owner_payout, 2) : round($base, 2);
+            $pct      = $ownerRev > 0 ? round($profit / $ownerRev * 100, 1) : 0;
+            $date     = ($p->paid_at ?? $p->created_at);
             return [
                 'booking_id'        => $b->id,
                 'booking_code'      => $b->booking_code,
@@ -140,9 +148,11 @@ class ReportController extends Controller
                 'hotel_name'        => $b->hotel?->name,
                 'hotel_city'        => $b->hotel?->city,
                 'date'              => $date?->format('Y-m-d'),
-                'base_price'        => round($base, 2),
+                'base_price'        => $ownerRev,        // = pendapatan owner (kompat field lama)
                 'markup_amount'     => round($markup, 2),
                 'pph_amount'        => $pph,
+                'discount_arahinn'  => (float) ($b->discount_arahinn ?? 0),
+                'discount_owner'    => (float) ($b->discount_owner ?? 0),
                 'commission_profit' => $profit,
                 'commission_pct'    => $pct,
                 'total_price'       => (float) $b->total_price,

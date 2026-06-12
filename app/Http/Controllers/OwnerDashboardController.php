@@ -36,17 +36,17 @@ class OwnerDashboardController extends Controller
         // manual / tidak melalui gateway.
         $paidStatuses = ['paid', 'issued'];
 
-        // PENTING: pendapatan owner = base_price (harga yang owner set), BUKAN
-        // total_price. total_price = base + markup (komisi platform + PPh) + PPN.
-        // Yang masuk ke kantong owner hanyalah base_price; sisanya porsi ArahInn/pajak.
+        // PENTING: pendapatan owner = owner_payout (skema beban diskon: owner tidak
+        // menanggung diskon ArahInn). Fallback ke base_price untuk booking historis.
+        $ownerRevExpr = DB::raw('COALESCE(owner_payout, base_price)');
         $totalRevenue     = Booking::whereIn('hotel_id', $ids)
             ->whereIn('status', $paidStatuses)
-            ->sum('base_price');
+            ->sum($ownerRevExpr);
 
         $revenueThisMonth = Booking::whereIn('hotel_id', $ids)
             ->whereIn('status', $paidStatuses)
             ->where('created_at', '>=', $thisMonth)
-            ->sum('base_price');
+            ->sum($ownerRevExpr);
 
         // Transparansi: bruto (dibayar customer) & potongan platform bulan ini
         $grossThisMonth   = Booking::whereIn('hotel_id', $ids)
@@ -75,7 +75,7 @@ class OwnerDashboardController extends Controller
             ->where('created_at', '>=', $thisMonth)
             ->get()
             ->groupBy(fn($b) => $b->created_at->format('Y-m-d'))
-            ->map(fn($g, $d) => ['date' => $d, 'amount' => (float) $g->sum('base_price')])
+            ->map(fn($g, $d) => ['date' => $d, 'amount' => (float) $g->sum(fn($b) => $b->owner_payout ?? $b->base_price)])
             ->values();
 
         return response()->json([
