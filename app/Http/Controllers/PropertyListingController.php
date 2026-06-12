@@ -78,6 +78,8 @@ class PropertyListingController extends Controller
             'address'         => 'nullable|string',
             'city'            => 'required|string|max:100',
             'province'        => 'nullable|string|max:100',
+            'latitude'        => 'nullable|numeric|between:-90,90',
+            'longitude'       => 'nullable|numeric|between:-180,180',
             'land_area'       => 'nullable|integer|min:1',
             'building_area'   => 'nullable|integer|min:1',
             'bedrooms'        => 'nullable|integer|min:0|max:255',
@@ -94,7 +96,10 @@ class PropertyListingController extends Controller
         $data['price_negotiable'] = filter_var($request->input('price_negotiable', false), FILTER_VALIDATE_BOOLEAN);
 
         if ($request->hasFile('images')) {
-            $data['images'] = $this->uploadImages($request, []);
+            $data['images'] = $this->applyPrimaryImage(
+                $this->uploadImages($request, []),
+                $request->input('primary_index')
+            );
         }
 
         if (isset($data['facilities']) && is_string($data['facilities'])) {
@@ -122,7 +127,7 @@ class PropertyListingController extends Controller
         $user    = auth('sanctum')->user();
         $listing = PropertyListing::findOrFail($id);
 
-        $isSuperadmin = $user->hasRole('superadmin');
+        $isSuperadmin = $user->hasRole('superadmin') || $user->hasRole('admin');
         $isOwner      = $user->hasRole('owner') && (int) $listing->owner_id === (int) $user->id;
 
         if (!$isSuperadmin && !$isOwner) {
@@ -140,6 +145,8 @@ class PropertyListingController extends Controller
             'address'         => 'nullable|string',
             'city'            => 'sometimes|string|max:100',
             'province'        => 'nullable|string|max:100',
+            'latitude'        => 'nullable|numeric|between:-90,90',
+            'longitude'       => 'nullable|numeric|between:-180,180',
             'land_area'       => 'nullable|integer|min:1',
             'building_area'   => 'nullable|integer|min:1',
             'bedrooms'        => 'nullable|integer|min:0|max:255',
@@ -160,7 +167,10 @@ class PropertyListingController extends Controller
             if (is_string($existing)) {
                 $existing = json_decode($existing, true) ?? [];
             }
-            $data['images'] = $this->uploadImages($request, (array) $existing);
+            $data['images'] = $this->applyPrimaryImage(
+                $this->uploadImages($request, (array) $existing),
+                $request->input('primary_index')
+            );
         }
 
         // Reset to pending after owner edit so admin reviews again
@@ -283,6 +293,21 @@ class PropertyListingController extends Controller
         );
 
         return response()->json(['success' => true, 'message' => 'Listing properti ditolak.', 'data' => $listing]);
+    }
+
+    /**
+     * Pindahkan foto pada $index ke posisi pertama → jadi thumbnail kartu (images[0]).
+     * $index = posisi foto utama di array gabungan (existing dipertahankan + upload baru).
+     */
+    private function applyPrimaryImage(array $images, $index): array
+    {
+        if ($index === null || $index === '') return $images;
+        $i = (int) $index;
+        if ($i <= 0 || !isset($images[$i])) return $images;
+        $primary = $images[$i];
+        unset($images[$i]);
+        array_unshift($images, $primary);
+        return array_values($images);
     }
 
     // ── Private: upload images helper ─────────────────────────────────────
