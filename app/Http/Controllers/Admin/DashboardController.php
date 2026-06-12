@@ -25,6 +25,26 @@ class DashboardController extends Controller
         $totalBookings = Booking::count();
         $totalRevenue = Payment::where('status', 'settlement')->sum('amount');
 
+        // ── Pendapatan KOMISI ArahInn (laba platform) ───────────────────────
+        // Per booking: markup_amount − (base_price × 2% PPh). Dihitung dari
+        // pembayaran settlement, kecuali booking refunded/canceled.
+        // Konsisten dengan ReportController::profit & halaman Laba Platform.
+        $pphRate    = 0.02;
+        $profitExpr = "GREATEST(bookings.markup_amount - (bookings.base_price * {$pphRate}), 0)";
+        $commBase   = fn() => DB::table('payments')
+            ->join('bookings', 'bookings.id', '=', 'payments.booking_id')
+            ->where('payments.status', 'settlement')
+            ->whereNotIn('bookings.status', ['refunded', 'canceled']);
+        $payDate    = 'COALESCE(payments.paid_at, payments.created_at)';
+
+        $commissionRevenue   = (float) $commBase()->sum(DB::raw($profitExpr));
+        $commissionThisMonth = (float) $commBase()
+            ->where(DB::raw($payDate), '>=', $thisMonthStart)
+            ->sum(DB::raw($profitExpr));
+        $commissionLastMonth = (float) $commBase()
+            ->whereBetween(DB::raw($payDate), [$lastMonthStart, $lastMonthEnd])
+            ->sum(DB::raw($profitExpr));
+
         $bookingsThisMonth = Booking::where('created_at', '>=', $thisMonthStart)->count();
         $bookingsLastMonth = Booking::whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->count();
 
@@ -75,9 +95,12 @@ class DashboardController extends Controller
                     'total_revenue' => $totalRevenue,
                     'bookings_this_month' => $bookingsThisMonth,
                     'revenue_this_month' => $revenueThisMonth,
+                    'commission_revenue' => round($commissionRevenue, 2),       // laba komisi ArahInn (total)
+                    'commission_this_month' => round($commissionThisMonth, 2),  // laba komisi bulan ini
                     'pending_bookings' => $pendingBookings,
                     'trends' => [
                         'revenue' => $this->calculateTrend($revenueThisMonth, $revenueLastMonth),
+                        'commission' => $this->calculateTrend($commissionThisMonth, $commissionLastMonth),
                         'bookings' => $this->calculateTrend($bookingsThisMonth, $bookingsLastMonth),
                         'users' => $this->calculateTrend($newUsersThisMonth, $newUsersLastMonth),
                         'hotels' => $this->calculateTrend($newHotelsThisMonth, $newHotelsLastMonth),

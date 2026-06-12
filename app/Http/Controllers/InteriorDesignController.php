@@ -42,7 +42,7 @@ class InteriorDesignController extends Controller
             'images.*'    => 'required|file|mimes:jpg,jpeg|max:5120|dimensions:min_width=600,min_height=600',
             'videos'      => 'nullable|array',
             'videos.*'    => "nullable|file|mimes:mpg,avi,mp4|max:{$maxVideoKb}",
-        ]);
+        ], self::uploadMessages(600));
 
         $data             = $request->only(['title', 'description', 'wa_number']);
         $data['status']   = 'pending';
@@ -93,7 +93,7 @@ class InteriorDesignController extends Controller
             'remove_images.*' => 'string',
             'remove_videos'   => 'nullable|array',
             'remove_videos.*' => 'string',
-        ]);
+        ], self::uploadMessages(600));
 
         $data = array_filter($request->only(['title', 'description', 'wa_number']), fn($v) => $v !== null);
 
@@ -156,6 +156,23 @@ class InteriorDesignController extends Controller
     }
 
     // ── Helpers ──────────────────────────────────────────────
+
+    /** Pesan validasi upload yang jelas (konsisten dgn fitur Akomodasi). */
+    public static function uploadMessages(int $minPx = 600): array
+    {
+        $maxBig = ini_get('upload_max_filesize');
+        return [
+            'images.required'     => 'Minimal 1 foto wajib diupload.',
+            'images.*.required'   => "Foto ke-:position gagal terbaca — kemungkinan ukurannya melebihi batas server (maks {$maxBig}). Kompres foto lalu coba lagi.",
+            'images.*.file'       => "Foto ke-:position gagal diupload (file tidak valid / melebihi batas server maks {$maxBig}). Kompres foto lalu coba lagi.",
+            'images.*.image'      => "Foto ke-:position bukan gambar valid / melebihi batas server (maks {$maxBig}). Pakai JPG dan kompres bila perlu.",
+            'images.*.mimes'      => 'Foto ke-:position harus berformat JPG/JPEG.',
+            'images.*.max'        => 'Foto ke-:position terlalu besar (maks 5MB per file).',
+            'images.*.dimensions' => "Foto ke-:position resolusinya terlalu kecil (min. {$minPx}×{$minPx} px).",
+            'videos.*.mimes'      => 'Video ke-:position harus berformat MP4/MPG/AVI.',
+            'videos.*.max'        => 'Video ke-:position terlalu besar.',
+        ];
+    }
 
     private function saveFile($file, string $subDir): string
     {

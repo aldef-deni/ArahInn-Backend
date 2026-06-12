@@ -86,6 +86,115 @@ class ReportController extends Controller
         ]);
     }
 
+    /**
+     * Laba/keuntungan platform dari KOMISI akomodasi.
+     *
+     * Markup tiap booking ("Pajak & Others") = base × (commission% + 2% PPh).
+     * Jadi laba komisi murni platform = markup_amount − (base_price × 2% PPh).
+     * (PPh & PPN adalah pajak yang disetor, bukan laba platform.)
+     *
+     * Dihitung dari pembayaran yang sudah settlement (uang benar-benar masuk),
+     * mengecualikan booking yang sudah refunded.
+     */
+    public function profit(Request $request)
+    {
+        $from = $request->from ? now()->parse($request->from)->startOfDay() : now()->startOfMonth();
+        $to   = $request->to ? now()->parse($request->to)->endOfDay() : now()->endOfDay();
+
+        $pphRate = 0.02; // PPh 2% (konsisten dgn PricingService::PPH_PERCENT)
+
+        $query = Payment::where('status', 'settlement')
+            ->whereBetween(DB::raw('COALESCE(paid_at, created_at)'), [$from, $to])
+            ->whereHas('booking', fn($q) => $q->whereNotIn('status', ['refunded', 'canceled']))
+            ->with(['booking' => fn($q) => $q->select(
+                'id', 'booking_code', 'guest_name', 'hotel_id',
+                'base_price', 'markup_amount', 'total_price', 'status', 'created_at'
+            )->with('hotel:id,name,city,owner_id')])
+            ->orderByRaw('COALESCE(paid_at, created_at) asc');
+
+        if ($request->hotel_id) {
+            $query->whereHas('booking', fn($q) => $q->where('hotel_id', $request->hotel_id));
+        }
+        if ($request->owner_id) {
+            $query->whereHas('booking', fn($q) =>
+                $q->whereHas('hotel', fn($q2) => $q2->where('owner_id', $request->owner_id))
+            );
+        }
+
+        $payments = $query->get()->filter(fn($p) => $p->booking); // buang payment tanpa booking
+
+        // Laba komisi per booking
+        $rows = $payments->map(function ($p) use ($pphRate) {
+            $b      = $p->booking;
+            $base   = (float) $b->base_price;
+            $markup = (float) $b->markup_amount;
+            $pph    = round($base * $pphRate, 2);
+            $profit = round(max(0, $markup - $pph), 2);  // laba komisi murni
+            $pct    = $base > 0 ? round($profit / $base * 100, 1) : 0;
+            $date   = ($p->paid_at ?? $p->created_at);
+            return [
+                'booking_id'        => $b->id,
+                'booking_code'      => $b->booking_code,
+                'guest_name'        => $b->guest_name,
+                'hotel_id'          => $b->hotel_id,
+                'hotel_name'        => $b->hotel?->name,
+                'hotel_city'        => $b->hotel?->city,
+                'date'              => $date?->format('Y-m-d'),
+                'base_price'        => round($base, 2),
+                'markup_amount'     => round($markup, 2),
+                'pph_amount'        => $pph,
+                'commission_profit' => $profit,
+                'commission_pct'    => $pct,
+                'total_price'       => (float) $b->total_price,
+            ];
+        })->values();
+
+        $totalProfit  = round($rows->sum('commission_profit'), 2);
+        $totalBase    = round($rows->sum('base_price'), 2);
+        $totalMarkup  = round($rows->sum('markup_amount'), 2);
+        $totalPph     = round($rows->sum('pph_amount'), 2);
+        $totalGross   = round($rows->sum('total_price'), 2);
+        $count        = $rows->count();
+
+        // Breakdown harian
+        $daily = $rows->groupBy('date')
+            ->map(fn($g, $date) => [
+                'date'   => $date,
+                'count'  => $g->count(),
+                'profit' => round($g->sum('commission_profit'), 2),
+                'base'   => round($g->sum('base_price'), 2),
+            ])
+            ->values();
+
+        // Breakdown per hotel (top kontributor laba)
+        $byHotel = $rows->groupBy('hotel_id')
+            ->map(fn($g) => [
+                'hotel_id'   => $g->first()['hotel_id'],
+                'hotel_name' => $g->first()['hotel_name'],
+                'count'      => $g->count(),
+                'profit'     => round($g->sum('commission_profit'), 2),
+            ])
+            ->sortByDesc('profit')
+            ->values();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'total_profit'      => $totalProfit,   // laba komisi platform
+                'total_base'        => $totalBase,     // porsi owner (harga kamar)
+                'total_markup'      => $totalMarkup,   // komisi + PPh
+                'total_pph'         => $totalPph,      // PPh (disetor, bukan laba)
+                'total_gross'       => $totalGross,    // total yang dibayar customer
+                'booking_count'     => $count,
+                'avg_commission_pct'=> $totalBase > 0 ? round($totalProfit / $totalBase * 100, 1) : 0,
+                'period'            => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
+                'daily'             => $daily,
+                'by_hotel'          => $byHotel,
+                'items'             => $rows,
+            ],
+        ]);
+    }
+
     public function canceled(Request $request)
     {
         $from = $request->from ?? now()->startOfMonth()->toDateString();

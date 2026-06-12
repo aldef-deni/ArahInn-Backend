@@ -87,7 +87,7 @@ class PropertyListingController extends Controller
             'contact_phone'   => 'nullable|string|max:30',
             'contact_email'   => 'nullable|email|max:100',
             'images.*'        => 'nullable|image|mimes:jpg,jpeg|max:5120|dimensions:min_width=800,min_height=800',
-        ]);
+        ], \App\Http\Controllers\InteriorDesignController::uploadMessages(800));
 
         $data['owner_id']         = $user->id;
         $data['status']           = 'pending';
@@ -149,7 +149,7 @@ class PropertyListingController extends Controller
             'contact_phone'   => 'nullable|string|max:30',
             'contact_email'   => 'nullable|email|max:100',
             'images.*'        => 'nullable|image|mimes:jpg,jpeg|max:5120|dimensions:min_width=800,min_height=800',
-        ]);
+        ], \App\Http\Controllers\InteriorDesignController::uploadMessages(800));
 
         if ($request->has('price_negotiable')) {
             $data['price_negotiable'] = filter_var($request->input('price_negotiable'), FILTER_VALIDATE_BOOLEAN);

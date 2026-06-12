@@ -36,11 +36,20 @@ class OwnerDashboardController extends Controller
         // manual / tidak melalui gateway.
         $paidStatuses = ['paid', 'issued'];
 
+        // PENTING: pendapatan owner = base_price (harga yang owner set), BUKAN
+        // total_price. total_price = base + markup (komisi platform + PPh) + PPN.
+        // Yang masuk ke kantong owner hanyalah base_price; sisanya porsi ArahInn/pajak.
         $totalRevenue     = Booking::whereIn('hotel_id', $ids)
             ->whereIn('status', $paidStatuses)
-            ->sum('total_price');
+            ->sum('base_price');
 
         $revenueThisMonth = Booking::whereIn('hotel_id', $ids)
+            ->whereIn('status', $paidStatuses)
+            ->where('created_at', '>=', $thisMonth)
+            ->sum('base_price');
+
+        // Transparansi: bruto (dibayar customer) & potongan platform bulan ini
+        $grossThisMonth   = Booking::whereIn('hotel_id', $ids)
             ->whereIn('status', $paidStatuses)
             ->where('created_at', '>=', $thisMonth)
             ->sum('total_price');
@@ -66,15 +75,17 @@ class OwnerDashboardController extends Controller
             ->where('created_at', '>=', $thisMonth)
             ->get()
             ->groupBy(fn($b) => $b->created_at->format('Y-m-d'))
-            ->map(fn($g, $d) => ['date' => $d, 'amount' => (float) $g->sum('total_price')])
+            ->map(fn($g, $d) => ['date' => $d, 'amount' => (float) $g->sum('base_price')])
             ->values();
 
         return response()->json([
             'success' => true,
             'data' => [
                 'summary' => [
-                    'total_revenue'      => (float) $totalRevenue,
-                    'revenue_this_month' => (float) $revenueThisMonth,
+                    'total_revenue'      => (float) $totalRevenue,      // netto diterima owner (base_price)
+                    'revenue_this_month' => (float) $revenueThisMonth,  // netto bulan ini
+                    'gross_this_month'   => (float) $grossThisMonth,    // bruto dibayar customer
+                    'commission_this_month' => (float) ($grossThisMonth - $revenueThisMonth), // potongan platform+pajak
                     'total_bookings'     => $totalBookings,
                     'bookings_this_month'=> $bookingsThisMonth,
                     'pending_bookings'   => $pendingBookings,

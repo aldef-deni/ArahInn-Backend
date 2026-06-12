@@ -222,12 +222,15 @@ class HotelController extends Controller
             : (json_decode($request->input($key, 'null'), true) ?? []);
 
         // Hotel photos
+        $uploadWarnings = [];
         $hotelImages = [];
         foreach ($request->file('hotel_photos', []) as $gi => $files) {
             $cat = $request->input("photo_categories.{$gi}", '');
             foreach ((array) $files as $file) {
+                if ($file && !$file->isValid()) { $uploadWarnings[] = $this->uploadErrorMessage($file); continue; }
                 $path = $upload($file, 'uploads/hotels');
                 if ($path) $hotelImages[] = ['path' => $path, 'category' => $cat];
+                elseif ($file) $uploadWarnings[] = ($file->getClientOriginalName() ?: 'Foto') . ': format tidak didukung (harus JPG/JPEG).';
             }
         }
 
@@ -325,8 +328,10 @@ class HotelController extends Controller
             foreach ($request->file("room_photos.{$ri}", []) as $gi => $files) {
                 $cat = $request->input("room_photos_category.{$ri}.{$gi}", '');
                 foreach ((array) $files as $file) {
+                    if ($file && !$file->isValid()) { $uploadWarnings[] = $this->uploadErrorMessage($file); continue; }
                     $path = $upload($file, 'uploads/rooms');
                     if ($path) $roomImages[] = ['path' => $path, 'category' => $cat];
+                    elseif ($file) $uploadWarnings[] = ($file->getClientOriginalName() ?: 'Foto kamar') . ': format tidak didukung (harus JPG/JPEG).';
                 }
             }
             $hotel->rooms()->create([
@@ -372,10 +377,16 @@ class HotelController extends Controller
             ['hotel_id' => $hotel->id, 'hotel_name' => $hotel->name]
         );
 
+        $message = 'Hotel berhasil didaftarkan, menunggu persetujuan admin.';
+        if (!empty($uploadWarnings)) {
+            $message = 'Hotel terdaftar, tetapi ' . count($uploadWarnings) . ' foto GAGAL diupload — lihat detail.';
+        }
+
         return response()->json([
-            'success' => true,
-            'message' => 'Hotel berhasil didaftarkan, menunggu persetujuan admin.',
-            'data'    => $hotel->load('rooms'),
+            'success'  => true,
+            'message'  => $message,
+            'warnings' => $uploadWarnings,
+            'data'     => $hotel->load('rooms'),
         ], 201);
     }
 
@@ -481,6 +492,7 @@ class HotelController extends Controller
             : (json_decode($request->input($key, json_encode($default)), true) ?? $default);
 
         // ── Foto hotel: existing yang dipertahankan + upload baru ──
+        $uploadWarnings = [];
         $existingImages = $jsonDecode('existing_images', []);
         $hotelImages    = [];
         foreach ((array) $existingImages as $img) {
@@ -493,8 +505,10 @@ class HotelController extends Controller
         foreach ($request->file('hotel_photos', []) as $gi => $files) {
             $cat = $request->input("photo_categories.{$gi}", '');
             foreach ((array) $files as $file) {
+                if ($file && !$file->isValid()) { $uploadWarnings[] = $this->uploadErrorMessage($file); continue; }
                 $path = $upload($file, 'uploads/hotels');
                 if ($path) $hotelImages[] = ['path' => $path, 'category' => $cat];
+                elseif ($file) $uploadWarnings[] = ($file->getClientOriginalName() ?: 'Foto') . ': format tidak didukung (harus JPG/JPEG).';
             }
         }
 
@@ -618,8 +632,10 @@ class HotelController extends Controller
             foreach ($request->file("room_photos.{$ri}", []) as $gi => $files) {
                 $cat = $request->input("room_photos_category.{$ri}.{$gi}", '');
                 foreach ((array) $files as $file) {
+                    if ($file && !$file->isValid()) { $uploadWarnings[] = $this->uploadErrorMessage($file); continue; }
                     $path = $upload($file, 'uploads/rooms');
                     if ($path) $newRoomPhotos[] = ['path' => $path, 'category' => $cat];
+                    elseif ($file) $uploadWarnings[] = ($file->getClientOriginalName() ?: 'Foto kamar') . ': format tidak didukung (harus JPG/JPEG).';
                 }
             }
 
@@ -661,11 +677,31 @@ class HotelController extends Controller
 
         ActivityLogService::log($user->id, 'UPDATE_HOTEL_FULL', 'hotel', $hotel->id, $request);
 
+        $message = 'Hotel berhasil diperbarui.';
+        if (!empty($uploadWarnings)) {
+            $message = 'Hotel diperbarui, tetapi ' . count($uploadWarnings) . ' foto GAGAL diupload — lihat detail.';
+        }
+
         return response()->json([
-            'success' => true,
-            'message' => 'Hotel berhasil diperbarui.',
-            'data'    => $hotel->fresh()->load('rooms'),
+            'success'  => true,
+            'message'  => $message,
+            'warnings' => $uploadWarnings,
+            'data'     => $hotel->fresh()->load('rooms'),
         ]);
+    }
+
+    /** Pesan error upload yang jelas untuk ditampilkan ke user. */
+    private function uploadErrorMessage($file): string
+    {
+        $name  = method_exists($file, 'getClientOriginalName') ? ($file->getClientOriginalName() ?: 'Foto') : 'Foto';
+        $limit = ini_get('upload_max_filesize');
+        return match ($file->getError()) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE =>
+                "{$name}: ukuran melebihi batas server (maks {$limit}). Kompres foto agar lebih kecil, atau naikkan limit upload server.",
+            UPLOAD_ERR_PARTIAL  => "{$name}: upload terputus, coba ulangi.",
+            UPLOAD_ERR_NO_TMP_DIR, UPLOAD_ERR_CANT_WRITE => "{$name}: server gagal menyimpan file, hubungi admin.",
+            default => "{$name}: gagal diupload (kode error {$file->getError()}).",
+        };
     }
 
     public function approve(Request $request, string $id)

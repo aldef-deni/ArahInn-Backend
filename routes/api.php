@@ -125,6 +125,7 @@ Route::prefix('properties')->group(function () {
 
 // ── Interior Designs (Public — gallery untuk customer & owner) ───────
 Route::get('/interior-designs', [InteriorDesignController::class, 'publicIndex']);
+Route::get('/interior-wa', [SettingController::class, 'getInteriorWa']); // nomor WA konsultasi (publik)
 
 // ── Interior Inquiries — submit publik (no auth required) ────────────
 Route::post('/interior-inquiries', [InteriorInquiryController::class, 'store']);
@@ -401,6 +402,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/revenue',     [ReportController::class, 'revenue']);
         Route::get('/reports/bookings',    [ReportController::class, 'bookings']);
         Route::get('/reports/canceled',    [ReportController::class, 'canceled']);
+        Route::get('/reports/profit',      [ReportController::class, 'profit']);
 
         // Analytics (overview/users/bookings/top-hotels)
         Route::get('/analytics/overview',   [AnalyticsController::class, 'overview']);
@@ -461,6 +463,12 @@ Route::middleware('auth:sanctum')->group(function () {
             ->middleware('role:superadmin');
         Route::post('/settings/travel-markup', [SettingController::class, 'setTravelMarkup'])
             ->middleware('role:superadmin');
+
+        // Nomor WA konsultasi Design Interior (superadmin/admin/design_interior)
+        Route::get('/settings/interior-wa',  [SettingController::class, 'getInteriorWa'])
+            ->middleware('role:superadmin|admin|design_interior');
+        Route::post('/settings/interior-wa', [SettingController::class, 'setInteriorWa'])
+            ->middleware('role:superadmin|admin|design_interior');
     });
 
     // ── Interior Designs ─────────────────────────────────────────────
@@ -519,6 +527,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('admin/travel')->middleware('role:superadmin|admin|finance')->group(function () {
         Route::get('/bookings',             [\App\Http\Controllers\TravelBookingController::class, 'adminBookings']);
         Route::post('/bookings/{id}/issue', [\App\Http\Controllers\TravelBookingController::class, 'adminIssue']);
+        Route::post('/bookings/{id}/cancel',[\App\Http\Controllers\TravelBookingController::class, 'adminCancel']);
     });
 
     Route::prefix('admin/ppob')->middleware('role:superadmin|admin|finance')->group(function () {

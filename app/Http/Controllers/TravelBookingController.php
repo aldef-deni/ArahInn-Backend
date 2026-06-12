@@ -440,6 +440,47 @@ class TravelBookingController extends Controller
         return response()->json(['success' => true, 'data' => $booking->fresh(), 'message' => 'E-tiket berhasil diterbitkan.']);
     }
 
+    /**
+     * Admin batalkan pesanan travel (yang belum terbit).
+     * POST /admin/travel/bookings/{id}/cancel   body: { reason?: string }
+     *
+     * Hanya untuk status pending_payment / paid. Tiket yang sudah 'issued'
+     * tidak bisa dibatalkan dari sini (sudah terbit ke operator).
+     */
+    public function adminCancel(Request $request, string $id)
+    {
+        $booking = TravelBooking::findOrFail($id);
+
+        if ($booking->status === 'canceled') {
+            return response()->json(['success' => true, 'data' => $booking, 'message' => 'Pesanan sudah dibatalkan.']);
+        }
+        if ($booking->status === 'issued') {
+            return response()->json(['success' => false, 'message' => 'E-tiket sudah terbit, tidak bisa dibatalkan dari sini.'], 422);
+        }
+        if (!in_array($booking->status, ['pending_payment', 'paid'])) {
+            return response()->json(['success' => false, 'message' => 'Status pesanan tidak bisa dibatalkan.'], 422);
+        }
+
+        $reason = trim((string) $request->input('reason', ''));
+        $booking->update([
+            'status' => 'canceled',
+            'meta'   => array_merge($booking->meta ?? [], [
+                'cancel' => [
+                    'reason' => $reason ?: 'Dibatalkan admin',
+                    'by'     => $request->user()->id,
+                    'by_name'=> $request->user()->name,
+                    'at'     => now()->toIso8601String(),
+                ],
+            ]),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'data'    => $booking->fresh(),
+            'message' => 'Pesanan travel dibatalkan.',
+        ]);
+    }
+
     /** Eksekusi issue ke Rajabiller + update booking + kirim e-tiket email. */
     private function issueBooking(TravelBooking $booking, bool $simulate): array
     {
