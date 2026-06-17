@@ -103,18 +103,38 @@ class SettingController extends Controller
 
     public function setPaymentManual(Request $request)
     {
+        // Field rekening OPSIONAL → boleh ubah sebagian (mis. hanya batas jam).
+        // Yang tidak dikirim/kosong tetap pakai nilai existing (tidak perlu isi ulang).
         $data = $request->validate([
-            'bank_name'      => 'required|string|max:50',
-            'account_number' => 'required|string|max:30',
-            'account_name'   => 'required|string|max:100',
+            'bank_name'      => 'nullable|string|max:50',
+            'account_number' => 'nullable|string|max:30',
+            'account_name'   => 'nullable|string|max:100',
             'expires_hours'  => 'nullable|integer|min:1|max:168', // max 7 hari
         ]);
 
+        $existing = self::manualBank();
+        $merge = function (string $k) use ($data, $existing) {
+            return (isset($data[$k]) && trim((string) $data[$k]) !== '')
+                ? trim((string) $data[$k]) : $existing[$k];
+        };
+
+        $accountNumber = $merge('account_number');
+        $accountName   = $merge('account_name');
+
+        // Tetap wajib terisi MINIMAL sekali (existing atau input baru).
+        if ($accountNumber === '' || $accountName === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Nomor rekening & atas nama wajib diisi (minimal sekali).',
+            ], 422);
+        }
+
         $settings = [
-            'bank_name'      => trim($data['bank_name']),
-            'account_number' => trim($data['account_number']),
-            'account_name'   => trim($data['account_name']),
-            'expires_hours'  => (int) ($data['expires_hours'] ?? 24),
+            'bank_name'      => $merge('bank_name') ?: 'BCA',
+            'account_number' => $accountNumber,
+            'account_name'   => $accountName,
+            'expires_hours'  => (int) ((isset($data['expires_hours']) && $data['expires_hours'])
+                ? $data['expires_hours'] : ($existing['expires_hours'] ?? 24)),
             'updated_by'     => $request->user()->id,
             'updated_at'     => now()->toIso8601String(),
         ];
@@ -336,13 +356,22 @@ class SettingController extends Controller
     public static function manualBank(): array
     {
         $override = self::readSetting('payment_manual_bank');
+        $override = is_array($override) ? $override : [];
         $config   = config('services.payment.manual_bank', []);
 
+        // Ambil dari override; bila kosong/null/tidak ada → fallback ke config (default).
+        // (operator ?? sebelumnya TIDAK fallback saat nilai berupa string kosong "")
+        $pick = function (string $k, $default) use ($override, $config) {
+            $v = $override[$k] ?? null;
+            if ($v !== null && $v !== '') return $v;
+            return $config[$k] ?? $default;
+        };
+
         return [
-            'bank_name'      => $override['bank_name']      ?? ($config['bank_name']      ?? 'BCA'),
-            'account_number' => $override['account_number'] ?? ($config['account_number'] ?? ''),
-            'account_name'   => $override['account_name']   ?? ($config['account_name']   ?? ''),
-            'expires_hours'  => $override['expires_hours']  ?? ($config['expires_hours']  ?? 24),
+            'bank_name'      => $pick('bank_name', 'BCA'),
+            'account_number' => $pick('account_number', ''),
+            'account_name'   => $pick('account_name', ''),
+            'expires_hours'  => $pick('expires_hours', 24),
         ];
     }
 }

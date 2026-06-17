@@ -284,6 +284,10 @@ class PaymentService
             ],
         ]);
 
+        // Selaraskan batas kedaluwarsa booking dengan waktu KLIK (mulai transfer),
+        // bukan waktu booking dibuat → countdown & hold ketersediaan konsisten.
+        $booking->update(['expires_at' => $expiresAt]);
+
         NotificationService::send(
             $booking->user_id,
             'payment_pending',
@@ -314,6 +318,9 @@ class PaymentService
             'unique_code'    => (int)   ($p['unique_code']   ?? 0),
             'final_amount'   => (float) ($p['final_amount']  ?? $payment->amount),
             'expired_at'     => $payment->expired_at?->toIso8601String(),
+            // Durasi sisa (detik) dari server → FE hitung mundur dari nilai ini
+            // supaya MULAI tepat (mis. 3600 = 1:00:00), bebas selisih jam device.
+            'expires_in_seconds' => $payment->expired_at ? max(0, (int) now()->diffInSeconds($payment->expired_at, false)) : null,
         ];
     }
 

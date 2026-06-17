@@ -35,6 +35,8 @@ class AuthController extends Controller
 
         if ($isNew) {
             try { Mail::to($user->email)->queue(new \App\Mail\WelcomeMail($user)); } catch (\Throwable) {}
+            // Bonus poin aktivasi user baru (idempoten)
+            try { app(\App\Services\LoyaltyService::class)->grantActivation($user->id); } catch (\Throwable) {}
             ActivityLogService::log($user->id, 'REGISTER', 'user', $user->id, $request);
         } else {
             ActivityLogService::log($user->id, 'ADD_ROLE_CUSTOMER', 'user', $user->id, $request);

@@ -307,8 +307,18 @@ Route::middleware('auth:sanctum')->group(function () {
 
         // Loyalty
         Route::get('/loyalty/balance',  [LoyaltyController::class, 'balance']);
+        Route::get('/loyalty/summary',  [LoyaltyController::class, 'summary']);
         Route::get('/loyalty/history',  [LoyaltyController::class, 'history']);
         Route::post('/loyalty/redeem',  [LoyaltyController::class, 'redeem']);
+    });
+
+    // ── Superadmin: Loyalty (konfigurasi + manajemen poin/tier member) ──────
+    Route::prefix('admin/loyalty')->middleware('role:superadmin')->group(function () {
+        Route::get('/config',              [\App\Http\Controllers\Admin\LoyaltyController::class, 'getConfig']);
+        Route::post('/config',             [\App\Http\Controllers\Admin\LoyaltyController::class, 'setConfig']);
+        Route::get('/users',               [\App\Http\Controllers\Admin\LoyaltyController::class, 'users']);
+        Route::post('/users/{id}/adjust',  [\App\Http\Controllers\Admin\LoyaltyController::class, 'adjust']);
+        Route::post('/users/{id}/tier',    [\App\Http\Controllers\Admin\LoyaltyController::class, 'setTier']);
     });
 
     // ── Superadmin: MM Handler (assign owners to Market Managers) ────────

@@ -176,13 +176,11 @@ class RoomPriceController extends Controller
             }
             if (empty($payload)) continue;
 
-            // Auto-derive is_available dari available_units:
-            //   available_units = 0 → is_available = false (kamar tutup hari itu)
-            //   available_units > 0 → is_available = true
-            // is_available manual tetap dihormati kalau available_units tidak dikirim.
-            if (array_key_exists('available_units', $payload) && $payload['available_units'] !== null) {
-                $payload['is_available'] = ((int) $payload['available_units']) > 0;
-            }
+            // CATATAN: is_available (Close out) & available_units (Allotment) INDEPENDEN.
+            // - Allotment 0 TIDAK otomatis close out (kamar bisa saja sengaja 0 unit tapi tidak ditutup).
+            // - Saat Close out aktif lalu allotment diisi, Close out TETAP (tidak auto-buka).
+            // Ketersediaan asli tetap aman karena booking dihitung dari (available_units - booked),
+            // jadi 0 unit = tidak bisa dibooking walau is_available true. Jangan auto-derive di sini.
 
             RoomPrice::updateOrCreate(
                 ['room_id' => $roomId, 'date' => $entry['date']],
@@ -233,9 +231,11 @@ class RoomPriceController extends Controller
             ->get()
             ->groupBy('room_id');
 
-        // Hitung jumlah booking aktif yang menempati tiap kamar × tanggal
+        // Booked = booking TERKONFIRMASI (paid/issued/rescheduled), KONSISTEN dgn
+        // method index & web extranet. Pending (abandoned checkout) TIDAK dihitung
+        // sebagai booked supaya angka "Booked" tidak phantom = 1.
         $bookings = Booking::whereIn('room_id', $roomIds)
-            ->whereIn('status', ['pending','paid','issued'])
+            ->whereIn('status', ['paid','issued','rescheduled'])
             ->where('check_in', '<=', $to->format('Y-m-d'))
             ->where('check_out', '>=', $from->format('Y-m-d'))
             ->get(['room_id','check_in','check_out','room_count']);
@@ -337,12 +337,11 @@ class RoomPriceController extends Controller
                         if ($request->has('price') && $request->price !== null) {
                             $update['price'] = (float) $request->price;
                         }
+                        // Allotment & Close out INDEPENDEN (lihat catatan di upsert()).
                         if ($request->has('available_units') && $request->available_units !== null) {
-                            $units = (int) $request->available_units;
-                            $update['available_units'] = $units;
-                            $update['is_available']    = $units > 0;
+                            $update['available_units'] = (int) $request->available_units;
                         }
-                        if ($request->has('is_available') && $request->is_available !== null && !array_key_exists('is_available', $update)) {
+                        if ($request->has('is_available') && $request->is_available !== null) {
                             $update['is_available'] = (bool) $request->is_available;
                         }
                         if ($update) {

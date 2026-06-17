@@ -3,6 +3,7 @@
 namespace App\Mail;
 
 use App\Models\TravelBooking;
+use App\Support\Countries;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -55,14 +56,36 @@ class TravelIssuedMail extends Mailable
         $cfg = self::modaConfig($b->moda);
         $fmtTime = fn ($s) => $s && strlen($s) === 4 ? substr($s, 0, 2) . ':' . substr($s, 2, 2) : $s;
 
-        // Flatten penumpang dari berbagai bentuk (adults/children/infants atau list datar)
+        // Flatten penumpang dari berbagai bentuk (adults/children/infants atau list datar).
+        // Semua field diambil sesuai isian form: title, nama, lahir, kewarganegaraan, NIK/paspor.
         $raw  = $b->passengers ?? [];
         $flat = [];
-        $push = function ($p, $type) use (&$flat) {
+        $fmtDate = fn ($s) => $s ? \Carbon\Carbon::parse($s)->translatedFormat('d M Y') : '';
+        $push = function ($p, $type) use (&$flat, $fmtDate) {
             if (!is_array($p)) return;
-            $name = $p['name'] ?? trim(($p['firstName'] ?? '') . ' ' . ($p['lastName'] ?? ''));
-            $id   = $p['idNumber'] ?? $p['identityNumber'] ?? $p['identity_number'] ?? '';
-            $flat[] = ['name' => $name ?: '—', 'type' => $type, 'id' => $id];
+            // Tahan camelCase (firstName) MAUPUN snake_case (first_name) — pesawat
+            // disimpan snake_case, kereta/pelni pakai key 'name' tunggal.
+            $title = $p['title'] ?? '';
+            $first = $p['firstName'] ?? $p['first_name'] ?? '';
+            $last  = $p['lastName']  ?? $p['last_name']  ?? '';
+            $name  = $p['name'] ?? trim("$first $last");
+            $natCode  = $p['nationality'] ?? $p['nationalityCode'] ?? '';
+            $nik      = $p['idNumber'] ?? $p['identityNumber'] ?? $p['identity_number'] ?? $p['id_number'] ?? '';
+            $passport = $p['passportNumber'] ?? $p['passport_number'] ?? '';
+            // WNA bila kode negara bukan ID, atau NIK kosong tapi paspor terisi
+            $foreign  = Countries::isForeign($natCode) || (!$nik && $passport);
+            $flat[] = [
+                'name'        => trim(($title ? $title . ' ' : '') . $name) ?: '—',
+                'type'        => $type,
+                'birthdate'   => $fmtDate($p['birthdate'] ?? $p['birth_date'] ?? ''),
+                'nationality' => Countries::name($natCode ?: 'ID'),
+                'idLabel'     => $foreign ? 'Paspor' : 'NIK',
+                'id'          => ($foreign ? $passport : $nik) ?: '',
+                'isForeign'   => $foreign,
+                'passportIssue'   => $fmtDate($p['passportIssueDate'] ?? $p['passport_issue_date'] ?? ''),
+                'passportExpiry'  => $fmtDate($p['passportExpiry'] ?? $p['passport_expiry'] ?? ''),
+                'passportCountry' => Countries::name($p['passportIssuingCountry'] ?? $p['passport_issuing_country'] ?? ''),
+            ];
         };
         if (isset($raw['adults']) || isset($raw['children']) || isset($raw['infants'])) {
             foreach (['adults' => 'Dewasa', 'children' => 'Anak', 'infants' => 'Bayi'] as $k => $t) {
@@ -88,7 +111,8 @@ class TravelIssuedMail extends Mailable
             'departDate'      => $b->depart_date ? $b->depart_date->translatedFormat('D, d M Y') : '—',
             'totalPrice'      => number_format($b->total_price, 0, ',', '.'),
             'pax'             => $flat,
-            'issuedAt'        => ($b->issued_at ?? $b->created_at)->translatedFormat('d M Y, H:i'),
+            // issued_at disimpan UTC → tampilkan dalam WIB agar sesuai waktu terbit asli.
+            'issuedAt'        => ($b->issued_at ?? $b->created_at)->copy()->setTimezone('Asia/Jakarta')->translatedFormat('d M Y, H:i') . ' WIB',
             'frontendUrl'     => rtrim(config('app.frontend_url') ?: config('app.url'), '/'),
         ];
     }

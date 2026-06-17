@@ -15,6 +15,7 @@ class Booking extends Model
         'status','promo_id','voucher_code','notes',
         'guest_name','guest_email','guest_phone',
         'expires_at','issued_at','canceled_at',
+        'voucher_sent_at','voucher_error',
     ];
     protected $casts = [
         'check_in'         => 'date',
@@ -32,6 +33,7 @@ class Booking extends Model
         'expires_at'       => 'datetime',
         'issued_at'        => 'datetime',
         'canceled_at'      => 'datetime',
+        'voucher_sent_at'  => 'datetime',
     ];
 
     public function user()     { return $this->belongsTo(User::class); }

@@ -51,10 +51,11 @@ return [
     'payment' => [
         'mode' => env('PAYMENT_MODE', 'doku'),
         'manual_bank' => [
-            'bank_name'       => env('PAYMENT_MANUAL_BANK_NAME', 'BCA'),
-            'account_number'  => env('PAYMENT_MANUAL_ACCOUNT_NUMBER', '8040083848'),
-            'account_name'    => env('PAYMENT_MANUAL_ACCOUNT_NAME', 'Rahmat Hidayattulah'),
-            'expires_hours'   => env('PAYMENT_MANUAL_EXPIRES_HOURS', 24),
+            // pakai ?: agar env yang di-set KOSONG ("") tetap jatuh ke default asli
+            'bank_name'       => env('PAYMENT_MANUAL_BANK_NAME') ?: 'BCA',
+            'account_number'  => env('PAYMENT_MANUAL_ACCOUNT_NUMBER') ?: '8040083848',
+            'account_name'    => env('PAYMENT_MANUAL_ACCOUNT_NAME') ?: 'Rahmat Hidayattulah',
+            'expires_hours'   => (int) (env('PAYMENT_MANUAL_EXPIRES_HOURS') ?: 24),
         ],
     ],
 

@@ -36,6 +36,17 @@ class PropertyListingController extends Controller
             $query->where('price', '<=', $maxPrice);
         }
 
+        // "Lokasi terdekat" — urutkan dari yang paling dekat dgn koordinat customer
+        if ($request->filled('lat') && $request->filled('lng')) {
+            $lat = (float) $request->lat;
+            $lng = (float) $request->lng;
+            $hav = "(6371 * acos(LEAST(1, cos(radians($lat)) * cos(radians(latitude))"
+                 . " * cos(radians(longitude) - radians($lng)) + sin(radians($lat)) * sin(radians(latitude)))))";
+            $query->whereNotNull('latitude')->whereNotNull('longitude')
+                  ->addSelect(\Illuminate\Support\Facades\DB::raw("$hav AS distance_km"))
+                  ->reorder()->orderBy('distance_km');
+        }
+
         $perPage  = (int) ($request->limit ?? 12);
         $listings = $query->paginate($perPage);
 

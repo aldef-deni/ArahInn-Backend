@@ -46,6 +46,22 @@
             <tr><td style="padding:12px 0; color:#1e293b; font-weight:bold; border-top:1px solid #e2e8f0;">Total</td><td style="padding:12px 0; text-align:right; font-weight:bold; font-size:17px; color:{{ $accent }}; border-top:1px solid #e2e8f0;">Rp {{ $totalPrice }}</td></tr>
           </table>
 
+          @if(!empty($pax))
+          <!-- Data Penumpang -->
+          <div style="margin-top:22px;">
+            <div style="font-size:11px; font-weight:bold; color:#475569; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;">Data Penumpang</div>
+            @foreach ($pax as $p)
+              <div style="border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; margin-bottom:8px;">
+                <div style="font-size:13px; font-weight:bold; color:#1e293b;">{{ $p['name'] }} <span style="font-size:11px; color:#94a3b8; font-weight:normal;">· {{ $p['type'] }}</span></div>
+                <div style="font-size:12px; color:#64748b; margin-top:3px;">{{ $p['nationality'] }} · {{ $p['idLabel'] ?? 'NIK' }}: {{ $p['id'] ?: '—' }}</div>
+                @if(!empty($p['isForeign']) && (!empty($p['passportCountry']) || !empty($p['passportIssue']) || !empty($p['passportExpiry'])))
+                  <div style="font-size:11px; color:#94a3b8; margin-top:2px;">@if(!empty($p['passportCountry']))Penerbit: {{ $p['passportCountry'] }}@endif @if(!empty($p['passportIssue']))· Terbit {{ $p['passportIssue'] }}@endif @if(!empty($p['passportExpiry']))· Berlaku s/d {{ $p['passportExpiry'] }}@endif</div>
+                @endif
+              </div>
+            @endforeach
+          </div>
+          @endif
+
           <p style="font-size:12px; color:#94a3b8; margin:20px 0 0; line-height:1.6;">
             📎 <strong>E-Tiket PDF terlampir.</strong> Tunjukkan saat check-in beserta identitas asli. Datang minimal 60–90 menit sebelum keberangkatan.
           </p>

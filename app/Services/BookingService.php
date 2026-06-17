@@ -95,11 +95,19 @@ class BookingService
                 'promo_code' => $data['promo_code'] ?? null,
                 'user_id'    => $userId,
                 'use_points' => $data['use_points'] ?? false,
+                'points_to_redeem' => $data['points_to_redeem'] ?? null,
                 'room_count' => $data['room_count'] ?? 1,
             ]);
 
             // 3. Simpan ke database (transaksi)
             $booking = DB::transaction(function () use ($data, $userId, $priceData, $bookingCode) {
+                // Batas waktu pembayaran: mode MANUAL ikut setting `expires_hours`
+                // (Pengaturan superadmin); selain itu (DOKU VA) tetap 30 menit.
+                $payMode   = \App\Http\Controllers\Admin\SettingController::paymentMode();
+                $expiresAt = $payMode === 'manual'
+                    ? now()->addHours(max(1, (int) (\App\Http\Controllers\Admin\SettingController::manualBank()['expires_hours'] ?? 24)))
+                    : now()->addMinutes(30);
+
                 $booking = Booking::create([
                     'booking_code'     => $bookingCode,
                     'user_id'          => $userId,
@@ -129,7 +137,7 @@ class BookingService
                     'guest_email'      => $data['guest_email'],
                     'guest_phone'      => $data['guest_phone'] ?? null,
                     'notes'            => $data['notes'] ?? null,
-                    'expires_at'       => now()->addMinutes(30),
+                    'expires_at'       => $expiresAt,
                 ]);
 
                 // Update promo used_count
@@ -253,11 +261,8 @@ class BookingService
         $booking->update(['status' => 'issued', 'issued_at' => now()]);
         $this->lock->unlock($booking->room_id);
 
-        // Tambah loyalty points: 1 point per Rp 1.000
-        $points = (int) floor($booking->total_price / 1000);
-        if ($points > 0) {
-            $this->loyalty->earn($booking->user_id, $points, $booking->id);
-        }
+        // Tambah loyalty points sesuai skema tier (Rp earn_per per poin × multiplier)
+        $this->loyalty->earnForBooking($booking);
 
         // Refresh model + relations untuk pastikan data lengkap saat render PDF
         $booking = $booking->fresh(['hotel', 'room']) ?? $booking;
@@ -270,12 +275,16 @@ class BookingService
                 ]);
             } else {
                 Mail::to($booking->guest_email)->send(new \App\Mail\BookingIssuedMail($booking));
+                // Tandai voucher BERHASIL terkirim (untuk penanda di panel admin)
+                $booking->update(['voucher_sent_at' => now(), 'voucher_error' => null]);
                 logger()->info('BookingIssued: voucher sent to guest', [
                     'booking_code' => $booking->booking_code,
                     'guest_email'  => $booking->guest_email,
                 ]);
             }
         } catch (\Throwable $e) {
+            // Simpan error agar admin tahu voucher GAGAL terkirim + bisa kirim ulang
+            $booking->update(['voucher_error' => mb_substr($e->getMessage(), 0, 480)]);
             logger()->error('BookingIssued: failed to send voucher to guest', [
                 'booking_code' => $booking->booking_code,
                 'guest_email'  => $booking->guest_email,

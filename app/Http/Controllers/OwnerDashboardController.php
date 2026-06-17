@@ -31,32 +31,37 @@ class OwnerDashboardController extends Controller
 
         $thisMonth = now()->startOfMonth();
 
-        // Revenue dihitung dari booking yang sudah pasti dibayar (paid/issued),
-        // bukan dari table payments — supaya juga cover booking yang dikonfirmasi
-        // manual / tidak melalui gateway.
-        $paidStatuses = ['paid', 'issued'];
+        // Status booking NYATA (terkonfirmasi) — sama dgn filter di halaman Reservasi.
+        // 'rescheduled' = booking yang sudah dibayar lalu dijadwal ulang (tetap nyata).
+        // Status pending/canceled/expired/failed = bukan booking nyata → tidak dihitung.
+        $confirmed = ['paid', 'issued', 'rescheduled'];
 
         // PENTING: pendapatan owner = owner_payout (skema beban diskon: owner tidak
         // menanggung diskon ArahInn). Fallback ke base_price untuk booking historis.
         $ownerRevExpr = DB::raw('COALESCE(owner_payout, base_price)');
         $totalRevenue     = Booking::whereIn('hotel_id', $ids)
-            ->whereIn('status', $paidStatuses)
+            ->whereIn('status', $confirmed)
             ->sum($ownerRevExpr);
 
         $revenueThisMonth = Booking::whereIn('hotel_id', $ids)
-            ->whereIn('status', $paidStatuses)
+            ->whereIn('status', $confirmed)
             ->where('created_at', '>=', $thisMonth)
             ->sum($ownerRevExpr);
 
         // Transparansi: bruto (dibayar customer) & potongan platform bulan ini
         $grossThisMonth   = Booking::whereIn('hotel_id', $ids)
-            ->whereIn('status', $paidStatuses)
+            ->whereIn('status', $confirmed)
             ->where('created_at', '>=', $thisMonth)
             ->sum('total_price');
 
-        $totalBookings     = Booking::whereIn('hotel_id', $ids)->count();
-        $bookingsThisMonth = Booking::whereIn('hotel_id', $ids)->where('created_at', '>=', $thisMonth)->count();
-        $pendingBookings   = Booking::whereIn('hotel_id', $ids)->where('status', 'pending')->count();
+        // Hanya hitung booking NYATA (confirmed), bukan keranjang batal/kedaluwarsa.
+        $totalBookings     = Booking::whereIn('hotel_id', $ids)->whereIn('status', $confirmed)->count();
+        $bookingsThisMonth = Booking::whereIn('hotel_id', $ids)->whereIn('status', $confirmed)->where('created_at', '>=', $thisMonth)->count();
+        // "Menunggu Konfirmasi" = booking pending yang MASIH HIDUP (belum kedaluwarsa),
+        // bukan keranjang lama yang sudah terbengkalai.
+        $pendingBookings   = Booking::whereIn('hotel_id', $ids)->where('status', 'pending')
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->count();
         $activeRooms       = Room::whereIn('hotel_id', $ids)->where('is_active', true)->count();
 
         $recentBookings = Booking::whereIn('hotel_id', $ids)
@@ -71,7 +76,7 @@ class OwnerDashboardController extends Controller
             ->pluck('count', 'status');
 
         $dailyRevenue = Booking::whereIn('hotel_id', $ids)
-            ->whereIn('status', $paidStatuses)
+            ->whereIn('status', $confirmed)
             ->where('created_at', '>=', $thisMonth)
             ->get()
             ->groupBy(fn($b) => $b->created_at->format('Y-m-d'))

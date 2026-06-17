@@ -25,6 +25,7 @@ class BookingController extends Controller
             'check_out'  => 'required|date|after:check_in',
             'promo_code' => 'nullable|string',
             'use_points' => 'boolean',
+            'points_to_redeem' => 'nullable|integer|min:0',
             'room_count' => 'nullable|integer|min:1',
         ]);
 
@@ -50,6 +51,7 @@ class BookingController extends Controller
             'guest_phone' => 'nullable|string',
             'promo_code' => 'nullable|string',
             'use_points' => 'boolean',
+            'points_to_redeem' => 'nullable|integer|min:0',
             'notes'      => 'nullable|string',
         ]);
 
@@ -244,6 +246,7 @@ class BookingController extends Controller
             \Illuminate\Support\Facades\Mail::to($booking->guest_email)
                 ->send(new \App\Mail\BookingIssuedMail($booking));
         } catch (\Throwable $e) {
+            $booking->update(['voucher_error' => mb_substr($e->getMessage(), 0, 480)]);
             logger()->error('ResendVoucher failed', [
                 'booking_code' => $booking->booking_code,
                 'error'        => $e->getMessage(),
@@ -253,6 +256,9 @@ class BookingController extends Controller
                 'message' => 'Gagal mengirim voucher. ' . $e->getMessage(),
             ], 500);
         }
+
+        // Berhasil → bersihkan penanda gagal
+        $booking->update(['voucher_sent_at' => now(), 'voucher_error' => null]);
 
         return response()->json([
             'success' => true,

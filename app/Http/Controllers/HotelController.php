@@ -103,6 +103,21 @@ class HotelController extends Controller
             };
         }
 
+        // Ketersediaan per tanggal: kalau user pilih rentang tanggal, hotel hanya tampil
+        // bila punya minimal 1 kamar aktif yang available (tidak closed-out & allotment belum penuh)
+        // untuk SEMUA malam menginap. Filter ini WAJIB sebelum paginate agar total/halaman akurat.
+        $checkIn  = $request->input('check_in');
+        $checkOut = $request->input('check_out');
+        if ($checkIn && $checkOut) {
+            $blockedRoomIds = $this->unavailableRoomIds($checkIn, $checkOut);
+            $query->whereHas('rooms', function ($q) use ($blockedRoomIds) {
+                $q->active();
+                if (!empty($blockedRoomIds)) {
+                    $q->whereNotIn('id', $blockedRoomIds);
+                }
+            });
+        }
+
         $perPage = (int) ($request->limit ?? 12);
         $result  = $query->paginate($perPage);
 
@@ -151,6 +166,80 @@ class HotelController extends Controller
                 'total_pages' => $result->lastPage(),
             ],
         ]);
+    }
+
+    /**
+     * Kumpulan room_id yang TIDAK tersedia untuk rentang [checkIn, checkOut).
+     * Sebuah kamar dianggap blocked bila pada SALAH SATU malam:
+     *  - closed-out (room_prices.is_available = false), ATAU
+     *  - allotment 0 (dari override available_units MAUPUN total_units), ATAU
+     *  - full booked: allotment - booking aktif <= 0.
+     * Logika ini menyelaraskan dengan BookingService::assertAllotment().
+     */
+    private function unavailableRoomIds(string $checkIn, string $checkOut): array
+    {
+        $cursor = \Carbon\Carbon::parse($checkIn)->startOfDay();
+        $end    = \Carbon\Carbon::parse($checkOut)->startOfDay();
+        if ($end->lte($cursor)) {
+            $end = (clone $cursor)->addDay();
+        }
+
+        $nights = [];
+        for ($c = clone $cursor; $c->lt($end); $c->addDay()) {
+            $nights[] = $c->format('Y-m-d');
+        }
+        if (empty($nights)) {
+            return [];
+        }
+
+        $blocked = [];
+
+        // Allotment default per kamar = total_units (fallback bila tidak ada override per-tanggal)
+        $totalUnits = \App\Models\Room::pluck('total_units', 'id'); // id => total_units
+
+        foreach ($nights as $d) {
+            // (1) Closed-out di tanggal ini → blocked
+            $closed = \App\Models\RoomPrice::whereDate('date', $d)
+                ->where('is_available', false)
+                ->pluck('room_id');
+            foreach ($closed as $rid) {
+                $blocked[(int) $rid] = true;
+            }
+
+            // Override allotment per kamar utk tanggal ini (available_units, bila di-set owner)
+            $override = \App\Models\RoomPrice::whereDate('date', $d)
+                ->whereNotNull('available_units')
+                ->pluck('available_units', 'room_id');
+
+            // Booking aktif yang menempati tanggal ini (paid/issued + pending belum expired)
+            $booked = \App\Models\Booking::where(function ($q) {
+                    $q->whereIn('status', ['paid', 'issued'])
+                      ->orWhere(function ($qq) {
+                          $qq->where('status', 'pending')
+                             ->where(function ($qqq) {
+                                 $qqq->whereNull('expires_at')->orWhere('expires_at', '>', now());
+                             });
+                      });
+                })
+                ->where('check_in', '<=', $d)
+                ->where('check_out', '>', $d)
+                ->groupBy('room_id')
+                ->selectRaw('room_id, SUM(room_count) as cnt')
+                ->pluck('cnt', 'room_id');
+
+            // (2)+(3) Evaluasi SETIAP kamar: sisa = allotment - booking.
+            // allotment = override (kalau di-set) atau total_units. Sisa <= 0 → blocked.
+            // Mencakup: allotment 0 (dari override maupun total_units) & full booked.
+            foreach ($totalUnits as $rid => $tu) {
+                $allot = $override->has($rid) ? (int) $override->get($rid) : (int) $tu;
+                $bk    = (int) $booked->get($rid, 0);
+                if (($allot - $bk) <= 0) {
+                    $blocked[(int) $rid] = true;
+                }
+            }
+        }
+
+        return array_keys($blocked);
     }
 
     public function show(string $id)

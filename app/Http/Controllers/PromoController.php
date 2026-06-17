@@ -134,7 +134,10 @@ class PromoController extends Controller
     // ── Admin: list all promos with owner info ────────────────────────────
     public function index()
     {
-        $promos = Promo::with('owner:id,name,email')->latest()->get();
+        // Hanya promo PLATFORM (dibuat ArahInn, owner_id null). Promo milik owner
+        // akomodasi TIDAK ditampilkan di menu superadmin — owner kelola sendiri
+        // lewat extranet masing-masing.
+        $promos = Promo::whereNull('owner_id')->with('owner:id,name,email')->latest()->get();
         return response()->json(['success' => true, 'data' => $promos]);
     }
 
@@ -222,7 +225,7 @@ class PromoController extends Controller
             'name'           => 'required|string',
             'code'           => 'required|string|unique:promos',  // voucher WAJIB pakai kode
             'description'    => 'nullable|string|max:2000',
-            'image'          => 'nullable|file|max:4096',
+            'image'          => 'nullable|file|max:5120|dimensions:min_width=1536,min_height=1024', // maks 5 MB, resolusi min 1536×1024
             'discount_type'  => 'required|in:percent,fixed',
             'discount_value' => 'required|numeric|min:0',
             'min_purchase'   => 'nullable|numeric',
@@ -239,6 +242,9 @@ class PromoController extends Controller
             'product_types'   => 'nullable|array',
             'product_types.*' => 'in:accommodation,pesawat,pelni,kereta',
             'hotel_id'        => 'nullable|integer|exists:hotels,id', // null = semua properti
+        ], [
+            'image.max'        => 'Ukuran gambar maksimal 5 MB.',
+            'image.dimensions' => 'Resolusi gambar minimal 1536×1024 piksel.',
         ]);
 
         // Semua promo bertipe voucher (berlaku via kode di checkout).
@@ -308,7 +314,10 @@ class PromoController extends Controller
 
         // Upload image flyer kalau ada file baru (bypass Flysystem)
         if ($request->hasFile('image')) {
-            $request->validate(['image' => 'file|max:4096']);
+            $request->validate(['image' => 'file|max:5120|dimensions:min_width=1536,min_height=1024'], [
+                'image.max'        => 'Ukuran gambar maksimal 5 MB.',
+                'image.dimensions' => 'Resolusi gambar minimal 1536×1024 piksel.',
+            ]); // maks 5 MB, resolusi min 1536×1024
             $ext = strtolower($request->file('image')->getClientOriginalExtension());
             if (!in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
                 return response()->json(['success' => false, 'message' => 'Format gambar harus jpg, jpeg, png, atau webp.'], 422);

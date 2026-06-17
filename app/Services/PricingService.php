@@ -53,14 +53,15 @@ class PricingService
     public function calculate(array $params): array
     {
         [
-            'room_id'    => $roomId,
-            'check_in'   => $checkIn,
-            'check_out'  => $checkOut,
-            'promo_code' => $promoCode,
-            'user_id'    => $userId,
-            'use_points' => $usePoints,
-            'room_count' => $roomCount,
-        ] = array_merge(['promo_code' => null, 'user_id' => null, 'use_points' => false, 'room_count' => 1], $params);
+            'room_id'          => $roomId,
+            'check_in'         => $checkIn,
+            'check_out'        => $checkOut,
+            'promo_code'       => $promoCode,
+            'user_id'          => $userId,
+            'use_points'       => $usePoints,
+            'points_to_redeem' => $pointsToRedeem,
+            'room_count'       => $roomCount,
+        ] = array_merge(['promo_code' => null, 'user_id' => null, 'use_points' => false, 'points_to_redeem' => null, 'room_count' => 1], $params);
 
         // Sertakan kolom category + lokasi → dibutuhkan untuk cek KONDISI promo
         // (jenis akomodasi & lokasi). Tanpa ini category null → promo selalu ditolak.
@@ -141,13 +142,16 @@ class PricingService
         // Kept for compatibility (occupancy_rate masih dilaporkan di breakdown)
         $occupancyRate = $this->getOccupancyRate($roomId, $checkIn, $checkOut, $room->total_units);
 
-        // 5. Loyalty points (max 10% dari subtotal)
+        // 5. Loyalty points — 1 poin = Rp1, tanpa batas (s/d 100% subtotal).
+        //    points_to_redeem (opsional) = nominal poin yang customer pilih untuk dipakai;
+        //    kalau kosong tapi use_points true → pakai maksimal (saldo s/d subtotal).
+        $loyaltyBalance  = $userId ? (\App\Models\User::find($userId)?->getLoyaltyBalance() ?? 0) : 0;
         $loyaltyDiscount = 0;
-        if ($usePoints && $userId) {
-            $user    = \App\Models\User::find($userId);
-            $balance = $user?->getLoyaltyBalance() ?? 0;
-            $loyaltyDiscount = min($balance, $subtotal * 0.10);
-            $subtotal -= $loyaltyDiscount;
+        $wantRedeem = $pointsToRedeem !== null ? max(0, (int) $pointsToRedeem) : null;
+        if ($userId && ($usePoints || ($wantRedeem ?? 0) > 0)) {
+            $maxRedeem       = min($loyaltyBalance, (int) floor($subtotal));
+            $loyaltyDiscount = $wantRedeem !== null ? min($wantRedeem, $maxRedeem) : $maxRedeem;
+            $subtotal       -= $loyaltyDiscount;
         }
 
         // 6. Pajak PPN — hanya kalau di-enable superadmin
@@ -172,6 +176,7 @@ class PricingService
             'owner_payout'          => $ownerPayout,                // diterima owner (skema beban)
             'commission_profit'     => $commissionProfit,           // laba komisi ArahInn (skema beban)
             'loyalty_discount' => round($loyaltyDiscount, 2),
+            'loyalty_balance'  => (int) $loyaltyBalance,
             'tax_amount'       => round($taxAmount, 2),
             'price_suffix'     => $priceSuffix,
             'total_price'      => $totalPrice,

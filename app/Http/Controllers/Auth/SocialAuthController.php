@@ -152,6 +152,7 @@ class SocialAuthController extends Controller
                     'password'       => null,
                 ]);
                 $user->assignRole('user');
+                try { app(\App\Services\LoyaltyService::class)->grantActivation($user->id); } catch (\Throwable) {}
             }
         }
 
@@ -296,6 +297,7 @@ class SocialAuthController extends Controller
                     'password'       => null,
                 ]);
                 $user->assignRole('user');
+                try { app(\App\Services\LoyaltyService::class)->grantActivation($user->id); } catch (\Throwable) {}
             }
         }
 
@@ -362,6 +364,7 @@ class SocialAuthController extends Controller
                     'password'       => null,
                 ]);
                 $user->assignRole('user');
+                try { app(\App\Services\LoyaltyService::class)->grantActivation($user->id); } catch (\Throwable) {}
             }
         }
 

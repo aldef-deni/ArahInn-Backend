@@ -7,7 +7,9 @@ use App\Models\PpobProduct;
 use App\Models\PpobTransaction;
 use App\Services\PpobService;
 use App\Services\RajaBillerService;
+use App\Services\TravelService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class PpobController extends Controller
 {
@@ -283,13 +285,31 @@ class PpobController extends Controller
      * Admin: saldo deposit Rajabiller terkini.
      * GET /api/v1/admin/ppob/balance
      *
-     * Sumber: kolom `saldo_akhir_rajabiller` dari transaksi TERAKHIR yang punya
-     * nilai saldo (direkam tiap transaksi sukses ke Rajabiller). Ini saldo deposit
-     * setelah transaksi terakhir — paling akurat tanpa endpoint cek-saldo khusus.
-     * (method info/cek/bayar Rajabiller tidak mengembalikan saldo di catalog call.)
+     * Sumber UTAMA: saldo LIVE dari sign-in Rajabiller (mengembalikan balance).
+     * Dompet deposit PPOB & Travel sama (UID SP347829), jadi 1 saldo. Di-cache 90 dtk
+     * agar tidak hammer tiap load dashboard; tombol Refresh tetap dapat data <=90 dtk.
+     * FALLBACK (kalau live gagal): kolom `saldo_akhir_rajabiller` dari transaksi terakhir.
      */
-    public function adminBalance()
+    public function adminBalance(Request $request, TravelService $travel)
     {
+        if ($request->boolean('fresh')) Cache::forget('rajabiller:live_balance');
+
+        $live = Cache::remember('rajabiller:live_balance', 90, function () use ($travel) {
+            $res = $travel->signIn(TravelService::CH_PROD);
+            $ok  = TravelService::isSuccess($res['rc'] ?? null) && ($res['balance'] ?? null) !== null;
+            return $ok ? ['balance' => (float) $res['balance'], 'at' => now()->toIso8601String()] : null;
+        });
+
+        if ($live) {
+            return response()->json([
+                'success'    => true,
+                'balance'    => $live['balance'],
+                'updated_at' => $live['at'],
+                'source'     => 'live',
+            ]);
+        }
+
+        // Fallback: snapshot dari transaksi terakhir bila live tidak tersedia.
         $latest = PpobTransaction::whereNotNull('saldo_akhir_rajabiller')
             ->where('saldo_akhir_rajabiller', '>', 0)
             ->orderByDesc('updated_at')

@@ -15,6 +15,14 @@ class LoyaltyController extends Controller
         return response()->json(['success' => true, 'data' => ['balance' => $balance]]);
     }
 
+    public function summary(Request $request)
+    {
+        return response()->json([
+            'success' => true,
+            'data'    => $this->loyalty->summary($request->user()->id),
+        ]);
+    }
+
     public function history(Request $request)
     {
         $history = $this->loyalty->getHistory($request->user()->id, $request->page ?? 1);
