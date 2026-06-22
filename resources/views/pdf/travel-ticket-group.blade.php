@@ -76,7 +76,7 @@
 
   @foreach ($legs as $leg)
     <div @unless($loop->last) style="page-break-after: always;" @endunless>
-      <div class="leg-tag">{{ $leg['legName'] ?? ($loop->first ? 'Penerbangan Pergi' : 'Penerbangan Pulang') }}</div>
+      <div class="leg-tag">{{ $loop->first ? 'Penerbangan Pergi' : 'Penerbangan Pulang' }}</div>
       @include('pdf._ticket-body', $leg + ['logoBase64' => $logoBase64])
     </div>
   @endforeach

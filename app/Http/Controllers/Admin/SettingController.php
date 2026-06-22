@@ -272,6 +272,49 @@ class SettingController extends Controller
     }
 
     /* ──────────────────────────────────────────────────────────────────────
+     * Biaya Layanan Akomodasi — tampil ke customer sebagai "Pajak & Others".
+     * Nominal flat ATAU persentase (jika persen diisi → dihitung dari harga
+     * kamar SETELAH promo/campaign). Bukan komisi owner; ini biaya ke customer.
+     * ───────────────────────────────────────────────────────────────────── */
+
+    public function getAccommodationServiceFee()
+    {
+        return response()->json(['success' => true, 'data' => self::accommodationServiceFee()]);
+    }
+
+    public function setAccommodationServiceFee(Request $request)
+    {
+        $data = $request->validate([
+            'amount'  => 'nullable|integer|min:0|max:100000000',
+            'percent' => 'nullable|numeric|min:0|max:100',
+        ]);
+
+        $settings = [
+            'amount'     => (int) ($data['amount'] ?? 0),
+            'percent'    => isset($data['percent']) ? round((float) $data['percent'], 2) : 0,
+            'updated_by' => $request->user()->id,
+            'updated_at' => now()->toIso8601String(),
+        ];
+        self::writeSetting('accommodation_service_fee', $settings);
+
+        $msg = $settings['percent'] > 0
+            ? "Biaya layanan akomodasi: {$settings['percent']}% dari harga kamar (setelah promo)."
+            : 'Biaya layanan akomodasi: Rp ' . number_format($settings['amount'], 0, ',', '.') . ' / pesanan.';
+
+        return response()->json(['success' => true, 'data' => $settings, 'message' => $msg]);
+    }
+
+    /** Biaya layanan akomodasi. Persen > 0 → pakai persen; selain itu nominal flat. Default 0. */
+    public static function accommodationServiceFee(): array
+    {
+        $override = self::readSetting('accommodation_service_fee');
+        return [
+            'amount'  => (int) ($override['amount'] ?? 0),
+            'percent' => (float) ($override['percent'] ?? 0),
+        ];
+    }
+
+    /* ──────────────────────────────────────────────────────────────────────
      * Nomor WhatsApp konsultasi Design Interior — bisa diubah admin.
      * Dipakai tombol "Mulai Konsultasi" di halaman /interior.
      * ───────────────────────────────────────────────────────────────────── */
@@ -306,6 +349,56 @@ class SettingController extends Controller
             'data'    => $settings,
             'message' => 'Nomor WhatsApp konsultasi diperbarui.',
         ]);
+    }
+
+    /* ──────────────────────────────────────────────────────────────────────
+     * Wishlist — fitur simpan hotel & properti favorit customer.
+     * enabled (on/off), types (hotel|property yang diizinkan), max_items
+     * (batas item per user; 0 = tak terbatas).
+     * ───────────────────────────────────────────────────────────────────── */
+
+    public function getWishlistConfig()
+    {
+        return response()->json(['success' => true, 'data' => self::wishlistConfig()]);
+    }
+
+    public function setWishlistConfig(Request $request)
+    {
+        $data = $request->validate([
+            'enabled'   => 'required|boolean',
+            'types'     => 'required|array|min:1',
+            'types.*'   => 'in:hotel,property',
+            'max_items' => 'required|integer|min:0|max:1000',
+        ]);
+
+        $settings = [
+            'enabled'    => (bool) $data['enabled'],
+            'types'      => array_values(array_unique($data['types'])),
+            'max_items'  => (int) $data['max_items'],
+            'updated_by' => $request->user()->id,
+            'updated_at' => now()->toIso8601String(),
+        ];
+        self::writeSetting('wishlist', $settings);
+
+        return response()->json([
+            'success' => true,
+            'data'    => $settings,
+            'message' => $data['enabled'] ? 'Konfigurasi wishlist diperbarui.' : 'Fitur wishlist dimatikan.',
+        ]);
+    }
+
+    /** Konfigurasi wishlist. Default: AKTIF, hotel & properti, tanpa batas. */
+    public static function wishlistConfig(): array
+    {
+        $o = self::readSetting('wishlist');
+        $o = is_array($o) ? $o : [];
+        $types = (isset($o['types']) && is_array($o['types']) && count($o['types'])) ? array_values($o['types']) : ['hotel', 'property'];
+
+        return [
+            'enabled'   => (bool) ($o['enabled'] ?? true),
+            'types'     => $types,
+            'max_items' => (int) ($o['max_items'] ?? 0),
+        ];
     }
 
     /** Nomor WA konsultasi interior. Default 6282181111618. */

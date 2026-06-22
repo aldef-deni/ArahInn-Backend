@@ -474,34 +474,65 @@ class TravelService
         return count($parts) === 3 ? "{$parts[1]}/{$parts[2]}/{$parts[0]}" : $ymd;
     }
 
-    /** ADT;title;first;last;MM/DD/YYYY;NIK;::phone;::phone;;;;email;1;ID;ID;;;ID; */
+    /** Punya paspor → penumpang internasional (WNA atau WNI ke luar negeri). */
+    private static function hasPassport(array $p): bool
+    {
+        return !empty($p['passportNumber']);
+    }
+
+    // Mapping Rajabiller posisi 13-18 (setelah email): DOCTYPE;nationality;passportNationality;
+    // passportExpiry;passportIssued;passportIssuing;baggage. Domestik pakai DOCTYPE 'KTP'/'1' &
+    // NIK di pos 6; internasional pakai 'PASSPORT' & nomor paspor di pos 6 + detail paspor terisi.
+    private static function paxTail(array $p): array
+    {
+        if (self::hasPassport($p)) {
+            return [
+                'PASSPORT',
+                $p['nationality'] ?? 'ID',
+                $p['nationality'] ?? 'ID',
+                self::dobMDY($p['passportExpiry'] ?? ''),
+                self::dobMDY($p['passportIssueDate'] ?? ''),
+                $p['passportIssuingCountry'] ?? 'ID',
+                '',
+            ];
+        }
+        // Domestik: format produksi yang sudah berhasil (pos 12 = '1'). JANGAN diubah.
+        return ['1', 'ID', 'ID', '', '', 'ID', ''];
+    }
+
+    /** Dokumen di pos 6: paspor bila internasional, selain itu NIK. */
+    private static function paxDocNo(array $p): string
+    {
+        return self::hasPassport($p) ? ($p['passportNumber'] ?? '') : ($p['idNumber'] ?? '');
+    }
+
+    /** ADT;title;first;last;MM/DD/YYYY;[NIK|paspor];::phone;::phone;;;;email;[KTP|PASSPORT];nat;passNat;passExp;passIssued;passIssuing;bag */
     private static function encodeAdult(array $p): string
     {
         $phone = $p['phone'] ?? '';
-        return implode(';', [
+        return implode(';', array_merge([
             'ADT', $p['title'] ?? 'MR', $p['firstName'] ?? '', $p['lastName'] ?? '',
-            self::dobMDY($p['birthdate'] ?? ''), $p['idNumber'] ?? '',
+            self::dobMDY($p['birthdate'] ?? ''), self::paxDocNo($p),
             "::{$phone}", "::{$phone}", '', '', '', $p['email'] ?? '',
-            '1', 'ID', 'ID', '', '', 'ID', '',
-        ]);
+        ], self::paxTail($p)));
     }
 
-    /** CHD;title;first;last;MM/DD/YYYY;NIK;ID;ID;;;ID; */
+    /** CHD;title;first;last;MM/DD/YYYY;NIK;ID;ID;;;ID; (domestik; intl anak menyusul setelah verifikasi vendor) */
     private static function encodeChild(array $p): string
     {
         return implode(';', [
             'CHD', $p['title'] ?? 'MSTR', $p['firstName'] ?? '', $p['lastName'] ?? '',
-            self::dobMDY($p['birthdate'] ?? ''), $p['idNumber'] ?? '',
+            self::dobMDY($p['birthdate'] ?? ''), self::paxDocNo($p),
             'ID', 'ID', '', '', 'ID', '',
         ]);
     }
 
-    /** INF;title;first;last;MM/DD/YYYY;NIK;ID;ID;;;ID; */
+    /** INF;title;first;last;MM/DD/YYYY;NIK;ID;ID;;;ID; (domestik; intl bayi menyusul setelah verifikasi vendor) */
     private static function encodeInfant(array $p): string
     {
         return implode(';', [
             'INF', $p['title'] ?? 'MSTR', $p['firstName'] ?? '', $p['lastName'] ?? '',
-            self::dobMDY($p['birthdate'] ?? ''), $p['idNumber'] ?? '',
+            self::dobMDY($p['birthdate'] ?? ''), self::paxDocNo($p),
             'ID', 'ID', '', '', 'ID', '',
         ]);
     }

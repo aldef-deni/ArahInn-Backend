@@ -162,6 +162,10 @@ class RoomController extends Controller
             'name' => 'required|string',
             'type' => 'required|string',
             'base_price' => 'required|numeric|min:0',
+            'weekly_price' => 'nullable|numeric|min:0',
+            'monthly_price' => 'nullable|numeric|min:0',
+            'weekly_plans' => 'nullable',
+            'monthly_plans' => 'nullable',
             'max_guests' => 'required|integer|min:1',
             'total_units' => 'required|integer|min:1',
             'facilities' => 'nullable|array',
@@ -172,6 +176,8 @@ class RoomController extends Controller
             'image_files.*' => 'file|mimes:jpg,jpeg|max:5120|dimensions:min_width=800,min_height=800',
         ]);
 
+        $data['weekly_plans']  = $this->sanitizePlans($request->input('weekly_plans'));
+        $data['monthly_plans'] = $this->sanitizePlans($request->input('monthly_plans'));
         $data['hotel_id'] = $hotelId;
         $data['images'] = $this->mergeRoomImages($request, $data['images'] ?? []);
         $room = Room::create($data);
@@ -187,6 +193,10 @@ class RoomController extends Controller
             'name' => 'sometimes|string',
             'type' => 'sometimes|string',
             'base_price' => 'sometimes|numeric|min:0',
+            'weekly_price' => 'nullable|numeric|min:0',
+            'monthly_price' => 'nullable|numeric|min:0',
+            'weekly_plans' => 'nullable',
+            'monthly_plans' => 'nullable',
             'max_guests' => 'sometimes|integer|min:1',
             'total_units' => 'sometimes|integer|min:1',
             'facilities' => 'nullable|array',
@@ -205,11 +215,38 @@ class RoomController extends Controller
             $data['images'] = $this->mergeRoomImages($request, $baseImages);
         }
 
+        if ($request->has('weekly_plans'))  $data['weekly_plans']  = $this->sanitizePlans($request->input('weekly_plans'));
+        if ($request->has('monthly_plans')) $data['monthly_plans'] = $this->sanitizePlans($request->input('monthly_plans'));
+
         unset($data['existing_images'], $data['image_files']);
 
         $room->update($data);
 
         return response()->json(['success' => true, 'data' => $room]);
+    }
+
+    /**
+     * Normalisasi opsi menginap lama → array [{label,desc,price}] bersih, atau null.
+     * Terima string JSON (mode FormData) maupun array (mode JSON).
+     */
+    private function sanitizePlans($raw): ?array
+    {
+        if (is_string($raw)) $raw = json_decode($raw, true);
+        if (!is_array($raw)) return null;
+        $out = [];
+        foreach ($raw as $p) {
+            if (!is_array($p)) continue;
+            $price = (float) ($p['price'] ?? 0);
+            $label = trim((string) ($p['label'] ?? ''));
+            if ($price > 0 && $label !== '') {
+                $out[] = [
+                    'label' => mb_substr($label, 0, 100),
+                    'desc'  => mb_substr(trim((string) ($p['desc'] ?? '')), 0, 500),
+                    'price' => $price,
+                ];
+            }
+        }
+        return $out ?: null;
     }
 
     public function destroy(string $hotelId, string $roomId)

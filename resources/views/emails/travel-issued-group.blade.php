@@ -21,7 +21,7 @@
           @foreach ($legs as $leg)
             @php $b = $leg['b']; @endphp
             <div style="border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px; margin-bottom:14px;">
-              <div style="display:inline-block; background:{{ $accent }}; color:#fff; font-size:10px; font-weight:bold; text-transform:uppercase; letter-spacing:1px; padding:4px 12px; border-radius:999px; margin-bottom:12px;">{{ $leg['legName'] }}</div>
+              <div style="display:inline-block; background:{{ $accent }}; color:#fff; font-size:10px; font-weight:bold; text-transform:uppercase; letter-spacing:1px; padding:4px 12px; border-radius:999px; margin-bottom:12px;">{{ $loop->first ? 'Penerbangan Pergi' : 'Penerbangan Pulang' }}</div>
 
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:10px;">
                 <tr>
@@ -41,6 +41,31 @@
                 <tr><td style="padding:7px 0; color:#64748b;">Kode Booking</td><td style="padding:7px 0; text-align:right; font-weight:bold; font-family:'Courier New',monospace;">{{ $b->code }}</td></tr>
                 <tr><td style="padding:7px 0; color:#64748b; border-top:1px solid #f1f5f9;">{{ $leg['serviceLabel'] }}</td><td style="padding:7px 0; text-align:right; font-weight:bold; border-top:1px solid #f1f5f9;">{{ $b->service_name ?: '—' }} · {{ $b->class ?: '—' }}</td></tr>
               </table>
+              @if(!empty($leg['baggage']))
+              <div style="margin-top:10px; padding:8px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">
+                <div style="font-size:11px; color:#475569;"><strong style="color:#1e293b;">Bagasi:</strong> {{ $leg['baggage'] }}</div>
+                <div style="margin-top:5px;">
+                  <span style="display:inline-block; font-size:10px; font-weight:bold; color:#dc2626; background:#fef2f2; border:1px solid #fecaca; border-radius:5px; padding:2px 7px; margin-right:5px;">Non Refund</span>
+                  <span style="display:inline-block; font-size:10px; font-weight:bold; color:#dc2626; background:#fef2f2; border:1px solid #fecaca; border-radius:5px; padding:2px 7px;">Non Reschedule</span>
+                </div>
+              </div>
+              @endif
+              @if(!empty($leg['flightNotes']))
+              <div style="font-size:11px; font-weight:bold; color:#334155; margin-top:10px;">Catatan Penting</div>
+              <ol style="font-size:11px; color:#475569; line-height:1.6; padding-left:16px; margin:2px 0 0;">
+                @foreach($leg['flightNotes'] as $n)
+                  <li>{{ $n }}</li>
+                @endforeach
+              </ol>
+              @endif
+              @if(!empty($leg['flightNotesEn']))
+              <div style="font-size:11px; font-weight:bold; color:#334155; margin-top:8px;">Important Notes</div>
+              <ol style="font-size:11px; color:#475569; line-height:1.6; padding-left:16px; margin:2px 0 0;">
+                @foreach($leg['flightNotesEn'] as $n)
+                  <li>{{ $n }}</li>
+                @endforeach
+              </ol>
+              @endif
             </div>
           @endforeach
 
@@ -52,8 +77,8 @@
             @foreach ($pax as $p)
               <div style="border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; margin-bottom:8px;">
                 <div style="font-size:13px; font-weight:bold; color:#1e293b;">{{ $p['name'] }} <span style="font-size:11px; color:#94a3b8; font-weight:normal;">· {{ $p['type'] }}</span></div>
-                <div style="font-size:12px; color:#64748b; margin-top:3px;">{{ $p['nationality'] }} · {{ $p['idLabel'] ?? 'NIK' }}: {{ $p['id'] ?: '—' }}</div>
-                @if(!empty($p['isForeign']) && (!empty($p['passportCountry']) || !empty($p['passportIssue']) || !empty($p['passportExpiry'])))
+                <div style="font-size:12px; color:#64748b; margin-top:3px;">{{ $p['nationality'] }} · {{ $p['idLabel'] ?? 'NIK' }}: {{ $p['id'] ?: '—' }}@if(empty($p['isForeign']) && !empty($p['passport'])) · Paspor: {{ $p['passport'] }}@endif</div>
+                @if(!empty($p['hasPassport']) && (!empty($p['passportCountry']) || !empty($p['passportIssue']) || !empty($p['passportExpiry'])))
                   <div style="font-size:11px; color:#94a3b8; margin-top:2px;">@if(!empty($p['passportCountry']))Penerbit: {{ $p['passportCountry'] }}@endif @if(!empty($p['passportIssue']))· Terbit {{ $p['passportIssue'] }}@endif @if(!empty($p['passportExpiry']))· Berlaku s/d {{ $p['passportExpiry'] }}@endif</div>
                 @endif
               </div>
@@ -67,7 +92,7 @@
           </table>
 
           <p style="font-size:12px; color:#94a3b8; margin:18px 0 0; line-height:1.6;">
-            📎 <strong>E-Tiket PDF terlampir (2 halaman: pergi &amp; pulang).</strong> Tunjukkan saat check-in beserta identitas asli. Datang minimal 60–90 menit sebelum keberangkatan.
+            📎 <strong>E-Tiket (2 halaman: pergi &amp; pulang) &amp; Invoice terlampir (PDF).</strong> Tunjukkan E-Tiket saat check-in beserta identitas asli. Datang minimal 60–90 menit sebelum keberangkatan.
           </p>
         </td></tr>
 

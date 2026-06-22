@@ -8,7 +8,7 @@ class Booking extends Model
     use HasFactory;
     protected $fillable = [
         'booking_code','user_id','hotel_id','room_id','rate_plan_id',
-        'check_in','check_out','total_nights','guests','room_count',
+        'check_in','check_out','total_nights','stay_type','stay_plan_label','guests','room_count',
         'base_price','markup_amount','promo_discount','loyalty_discount',
         'discount_arahinn','discount_owner','owner_payout','commission_profit',
         'tax_amount','total_price','price_suffix',
@@ -35,6 +35,17 @@ class Booking extends Model
         'canceled_at'      => 'datetime',
         'voucher_sent_at'  => 'datetime',
     ];
+
+    // Label menginap tampil di voucher, email, API, & laporan (akomodasi).
+    protected $appends = ['stay_label'];
+    public function getStayLabelAttribute(): string
+    {
+        return match ($this->stay_type) {
+            'weekly'  => 'Mingguan (7 malam)',
+            'monthly' => 'Bulanan (30 malam)',
+            default   => 'Harian',
+        };
+    }
 
     public function user()     { return $this->belongsTo(User::class); }
     public function hotel()    { return $this->belongsTo(Hotel::class); }

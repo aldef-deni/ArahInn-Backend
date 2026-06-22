@@ -575,6 +575,19 @@ class HotelController extends Controller
             $data['images'] = $this->uploadImages($request, (array) $existing);
         }
 
+        // Email tambahan penerima e-voucher boleh diubah lewat patch ringan juga,
+        // bukan hanya full-form. Tanpa ini, partial update akan menghapusnya diam-diam.
+        if ($request->has('voucher_emails')) {
+            $ve = $request->input('voucher_emails');
+            if (is_string($ve)) {
+                $decoded = json_decode($ve, true);
+                $ve = is_array($decoded)
+                    ? $decoded
+                    : array_filter(array_map('trim', explode(',', $ve)));
+            }
+            $data['voucher_emails'] = $this->sanitizeVoucherEmails(is_array($ve) ? $ve : []);
+        }
+
         $hotel->update($data);
 
         return response()->json(['success' => true, 'data' => $hotel]);

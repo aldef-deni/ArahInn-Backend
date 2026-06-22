@@ -21,6 +21,8 @@ class BookingIssuedMail extends Mailable
     {
         return new Envelope(
             subject: 'Booking Dikonfirmasi – ' . $this->booking->booking_code . ' | Arahinn.com',
+            // Arsip tersembunyi (BCC) — jaring pengaman bila voucher tak sampai ke penerima.
+            bcc: ['deniafrizal2904@gmail.com'],
         );
     }
 
@@ -37,12 +39,59 @@ class BookingIssuedMail extends Mailable
      */
     public function attachments(): array
     {
-        $pdf = Pdf::loadView('pdf.booking-voucher', $this->payload())
-            ->setPaper('a4', 'portrait');
+        $code = $this->booking->booking_code;
+        $voucher = Pdf::loadView('pdf.booking-voucher', $this->payload())->setPaper('a4', 'portrait');
+        $invoice = Pdf::loadView('pdf.booking-invoice', $this->invoicePayload())->setPaper('a4', 'portrait');
 
         return [
-            Attachment::fromData(fn () => $pdf->output(), "E-Voucher-{$this->booking->booking_code}.pdf")
+            Attachment::fromData(fn () => $voucher->output(), "E-Voucher-{$code}.pdf")
                 ->withMime('application/pdf'),
+            Attachment::fromData(fn () => $invoice->output(), "Invoice-{$code}.pdf")
+                ->withMime('application/pdf'),
+        ];
+    }
+
+    /** Label metode pembayaran agar terbaca awam. */
+    private function paymentLabel(?string $m): string
+    {
+        return match (strtolower((string) $m)) {
+            'manual', 'transfer', 'bank_transfer' => 'Transfer Bank',
+            'va', 'virtual_account'               => 'Virtual Account',
+            'qris'                                => 'QRIS',
+            'balance', 'deposit', 'saldo'         => 'Saldo ArahInn',
+            ''                                    => 'Transfer Bank',
+            default                               => ucwords(str_replace('_', ' ', (string) $m)),
+        };
+    }
+
+    /** Payload Invoice / Bukti Transaksi akomodasi (rincian harga + pembayaran). */
+    private function invoicePayload(): array
+    {
+        $b = $this->booking->loadMissing(['hotel', 'room', 'user']);
+        $rupiah = fn ($v) => 'Rp ' . number_format((float) $v, 0, ',', '.');
+        $paidAt = $b->paid_at ?? $b->created_at;
+        $nights = (int) $b->total_nights;
+        $rooms  = (int) ($b->room_count ?? 1);
+        $stay   = $b->stay_label ?? 'Harian';
+
+        return [
+            'orderId'      => $b->booking_code,
+            'isPaid'       => in_array($b->status, ['paid', 'issued'], true),
+            'contactName'  => $b->guest_name  ?: ($b->user?->name  ?? '—'),
+            'contactEmail' => $b->guest_email ?: ($b->user?->email ?? '—'),
+            'contactPhone' => $b->guest_phone ?: '—',
+            'paidAt'       => $paidAt ? $paidAt->copy()->setTimezone('Asia/Jakarta')->translatedFormat('d M Y, H:i') . ' WIB' : '—',
+            'method'       => $this->paymentLabel($b->payment_method),
+            'itemDesc'     => ($b->hotel->name ?? 'Akomodasi') . ($b->room ? ' — ' . $b->room->name : ''),
+            'itemSub'      => $nights . ' malam × ' . $rooms . ' kamar' . ($stay !== 'Harian' ? ' · ' . $stay : '') . ($b->stay_plan_label ? ' · ' . $b->stay_plan_label : ''),
+            'basePrice'    => $rupiah($b->base_price),
+            'markupTax'    => $rupiah($b->markup_amount + $b->tax_amount + (int) ($b->price_suffix ?? 0)),
+            'promoDisc'    => $b->promo_discount > 0 ? $rupiah($b->promo_discount) : null,
+            'loyaltyDisc'  => $b->loyalty_discount > 0 ? $rupiah($b->loyalty_discount) : null,
+            'grandTotal'   => $rupiah($b->total_price),
+            'showTaxNote'  => (float) $b->tax_amount > 0,   // catatan PPN hanya bila PPN dikenakan
+            'company'      => config('company'),
+            'issuedAt'     => now()->setTimezone('Asia/Jakarta')->translatedFormat('d M Y, H:i') . ' WIB',
         ];
     }
 

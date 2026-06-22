@@ -27,6 +27,8 @@ class BookingController extends Controller
             'use_points' => 'boolean',
             'points_to_redeem' => 'nullable|integer|min:0',
             'room_count' => 'nullable|integer|min:1',
+            'stay_type'  => 'nullable|in:daily,weekly,monthly',
+            'stay_plan_index' => 'nullable|integer|min:0',
         ]);
 
         try {
@@ -52,6 +54,8 @@ class BookingController extends Controller
             'promo_code' => 'nullable|string',
             'use_points' => 'boolean',
             'points_to_redeem' => 'nullable|integer|min:0',
+            'stay_type'  => 'nullable|in:daily,weekly,monthly',
+            'stay_plan_index' => 'nullable|integer|min:0',
             'notes'      => 'nullable|string',
         ]);
 

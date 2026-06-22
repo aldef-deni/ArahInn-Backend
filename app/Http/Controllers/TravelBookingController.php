@@ -774,9 +774,17 @@ class TravelBookingController extends Controller
         return response()->json(['success' => true, 'data' => $items]);
     }
 
+    /** Cari booking milik user berdasarkan kode (TRV…) atau id numerik. */
+    private function findUserBooking(Request $request, string $key): TravelBooking
+    {
+        $q = TravelBooking::where('user_id', $request->user()->id);
+        ctype_digit($key) ? $q->where('id', $key) : $q->where('code', $key);
+        return $q->firstOrFail();
+    }
+
     public function show(Request $request, string $id)
     {
-        $booking = TravelBooking::where('id', $id)->where('user_id', $request->user()->id)->firstOrFail();
+        $booking = $this->findUserBooking($request, $id);
         $data = $booking->toArray();
         // Pulang-pergi: sertakan semua leg dalam group + total order gabungan.
         if ($booking->group_code) {
@@ -791,7 +799,7 @@ class TravelBookingController extends Controller
     /** Stream PDF e-tiket untuk di-download customer. */
     public function downloadEtiket(Request $request, string $id)
     {
-        $booking = TravelBooking::where('id', $id)->where('user_id', $request->user()->id)->firstOrFail();
+        $booking = $this->findUserBooking($request, $id);
         if (!in_array($booking->status, ['paid', 'issued'])) {
             return response()->json(['success' => false, 'message' => 'E-tiket tersedia setelah pembayaran berhasil.'], 400);
         }

@@ -177,8 +177,11 @@
         <div class="val">{{ $checkIn }}</div>
         <div class="small muted">Mulai pukul 14:00 WIB</div>
       </td>
-      <td style="width:24%">
+      <td style="width:24%; text-align:center;">
         <span class="nights">{{ $nights }} Malam</span>
+        @if(($booking->stay_type ?? 'daily') !== 'daily')
+          <div style="margin-top:5px; display:inline-block; background:#ecfdf5; color:#047857; border:1px solid #a7f3d0; padding:3px 10px; border-radius:99px; font-size:10px; font-weight:bold;">Paket {{ $booking->stay_label }}</div>
+        @endif
       </td>
       <td style="width:38%">
         <div class="lbl">Check-out</div>
@@ -218,27 +221,7 @@
     </table>
   </div>
 
-  {{-- Rincian harga --}}
-  <div class="section">
-    <div class="section-title">Rincian Pembayaran</div>
-    <table class="price">
-      <tr class="muted"><td>Harga kamar ({{ $nights }} malam × {{ $booking->room_count ?? 1 }} kamar)</td><td>Rp {{ $basePrice }}</td></tr>
-      <tr class="muted"><td>Biaya layanan platform (12%)</td><td>Rp {{ $markupAmt }}</td></tr>
-      @if((float)$booking->tax_amount > 0)
-      <tr class="muted"><td>PPN</td><td>Rp {{ $taxAmt }}</td></tr>
-      @endif
-      @if((float)$booking->promo_discount > 0)
-      <tr class="discount"><td>Diskon promo</td><td>− Rp {{ $promoDisc }}</td></tr>
-      @endif
-      @if((float)$booking->loyalty_discount > 0)
-      <tr class="discount"><td>Diskon poin loyalitas</td><td>− Rp {{ $loyaltyDisc }}</td></tr>
-      @endif
-      @if($priceSuffix > 0)
-      <tr class="muted"><td>Kode unik transfer</td><td>+ {{ $priceSuffix }}</td></tr>
-      @endif
-      <tr class="total"><td>TOTAL DIBAYAR</td><td>Rp {{ $totalPrice }}</td></tr>
-    </table>
-  </div>
+  {{-- Rincian harga DIPINDAH ke dokumen Invoice terpisah (lihat lampiran Invoice). --}}
 
   {{-- Instructions --}}
   <div class="instructions">

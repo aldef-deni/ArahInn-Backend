@@ -44,7 +44,7 @@
             </h1>
             <p style="margin:0; font-size:14px; line-height:1.7; color:#475569;">
               Terima kasih telah memesan melalui <strong style="color:#1d4ed8;">Arahinn.com</strong>. Pembayaran Anda telah berhasil dan booking telah dikonfirmasi.
-              Detail lengkap E-Voucher juga sudah terlampir dalam email ini (PDF — siap cetak).
+              <strong>E-Voucher</strong> (untuk check-in) &amp; <strong>Invoice pembayaran</strong> sudah terlampir dalam email ini (2 PDF — siap cetak).
             </p>
           </td>
         </tr>
@@ -79,6 +79,9 @@
                 </td>
                 <td width="20%" align="center" style="vertical-align:middle;">
                   <span style="display:inline-block; background:#2563eb; color:#fff; padding:7px 14px; border-radius:99px; font-size:12px; font-weight:700;">{{ $nights }} Malam</span>
+                  @if(($booking->stay_type ?? 'daily') !== 'daily')
+                    <div style="margin-top:6px; display:inline-block; background:#ecfdf5; color:#047857; border:1px solid #a7f3d0; padding:3px 10px; border-radius:99px; font-size:10px; font-weight:700;">Paket {{ $booking->stay_label }}</div>
+                  @endif
                 </td>
                 <td width="40%" style="padding:18px 18px; text-align:center; vertical-align:top;">
                   <div style="font-size:10px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:1px;">Check-out</div>
@@ -158,12 +161,12 @@
                 <td style="padding:5px 0; font-size:13px; color:#1e293b; text-align:right;">Rp {{ $basePrice }}</td>
               </tr>
               <tr>
-                <td style="padding:5px 0; font-size:13px; color:#64748b;">Biaya layanan platform (12%)</td>
+                <td style="padding:5px 0; font-size:13px; color:#64748b;">Biaya layanan platform</td>
                 <td style="padding:5px 0; font-size:13px; color:#1e293b; text-align:right;">Rp {{ $markupAmt }}</td>
               </tr>
               @if((float)$booking->tax_amount > 0)
               <tr>
-                <td style="padding:5px 0; font-size:13px; color:#64748b;">PPN</td>
+                <td style="padding:5px 0; font-size:13px; color:#64748b;">Pajak</td>
                 <td style="padding:5px 0; font-size:13px; color:#1e293b; text-align:right;">Rp {{ $taxAmt }}</td>
               </tr>
               @endif
@@ -208,8 +211,8 @@
                         <div style="width:36px; height:36px; background:#f97316; border-radius:8px; color:#fff; font-weight:700; font-size:11px; text-align:center; line-height:36px;">PDF</div>
                       </td>
                       <td style="vertical-align:top;">
-                        <div style="font-size:13px; font-weight:700; color:#7c2d12; margin-bottom:2px;">E-Voucher Terlampir</div>
-                        <div style="font-size:12px; color:#9a3412; line-height:1.5;">File <strong>E-Voucher-{{ $booking->booking_code }}.pdf</strong> sudah dilampirkan di email ini. Silakan unduh & cetak untuk ditunjukkan saat check-in.</div>
+                        <div style="font-size:13px; font-weight:700; color:#7c2d12; margin-bottom:2px;">E-Voucher &amp; Invoice Terlampir</div>
+                        <div style="font-size:12px; color:#9a3412; line-height:1.5;">File <strong>E-Voucher-{{ $booking->booking_code }}.pdf</strong> (tunjukkan saat check-in) &amp; <strong>Invoice-{{ $booking->booking_code }}.pdf</strong> (bukti pembayaran) sudah dilampirkan di email ini.</div>
                       </td>
                     </tr>
                   </table>

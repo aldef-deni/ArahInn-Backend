@@ -72,6 +72,13 @@ class BookingService
 
     public function create(array $data, int $userId): array
     {
+        // Long-stay: paksa durasi sesuai pilihan (mingguan 7 / bulanan 30 malam) agar
+        // allotment (per tanggal) & harga konsisten — apa pun check_out dari FE.
+        $stayType = in_array($data['stay_type'] ?? 'daily', ['weekly', 'monthly'], true) ? $data['stay_type'] : 'daily';
+        if ($stayType !== 'daily') {
+            $data['check_out'] = \Carbon\Carbon::parse($data['check_in'])->addDays($stayType === 'weekly' ? 7 : 30)->toDateString();
+        }
+
         // Mutex pendek: kunci room sebentar supaya cek ketersediaan + simpan booking
         // bersifat atomic (cegah 2 request bersamaan double-book unit terakhir).
         // Dilepas SELALU di finally — tidak nyangkut, tidak memblokir user sendiri.
@@ -97,6 +104,8 @@ class BookingService
                 'use_points' => $data['use_points'] ?? false,
                 'points_to_redeem' => $data['points_to_redeem'] ?? null,
                 'room_count' => $data['room_count'] ?? 1,
+                'stay_type'  => $stayType,
+                'stay_plan_index' => $data['stay_plan_index'] ?? 0,
             ]);
 
             // 3. Simpan ke database (transaksi)
@@ -117,6 +126,8 @@ class BookingService
                     'check_in'         => $data['check_in'],
                     'check_out'        => $data['check_out'],
                     'total_nights'     => $priceData['nights'],
+                    'stay_type'        => $priceData['stay_type'] ?? 'daily',
+                    'stay_plan_label'  => $priceData['stay_plan_label'] ?? null,
                     'guests'           => $data['guests'],
                     'room_count'       => $data['room_count'] ?? 1,
                     'base_price'       => $priceData['base_price'],

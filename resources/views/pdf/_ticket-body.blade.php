@@ -72,6 +72,18 @@
   </table>
 </div>
 
+@if(!empty($baggage))
+<div class="section">
+  <div class="section-title">Ketentuan Tiket</div>
+  <table class="info-grid">
+    <tr>
+      <td><div class="k">Ketentuan Bagasi</div><div class="v">{{ $baggage }}</div></td>
+      <td><div class="k">Pengembalian &amp; Perubahan</div><div class="v" style="color:#dc2626;">Non Refund &nbsp;·&nbsp; Non Reschedule</div></td>
+    </tr>
+  </table>
+</div>
+@endif
+
 @if(count($pax))
 <div class="section">
   <div class="section-title">Data Penumpang</div>
@@ -97,10 +109,14 @@
         <td style="vertical-align:top;">{{ $p['nationality'] ?: '—' }}</td>
         <td style="vertical-align:top;">
           <strong>{{ $p['idLabel'] ?? 'NIK' }}:</strong> {{ $p['id'] ?: '—' }}
-          @if(!empty($p['isForeign']) && (!empty($p['passportCountry']) || !empty($p['passportIssue']) || !empty($p['passportExpiry'])))
+          @if(empty($p['isForeign']) && !empty($p['hasPassport']) && !empty($p['passport']))
+            <div style="margin-top:2px;"><strong>Paspor:</strong> {{ $p['passport'] }}</div>
+          @endif
+          @if(!empty($p['hasPassport']) && (!empty($p['passportCountry']) || !empty($p['passportIssue']) || !empty($p['passportExpiry'])))
             <div style="font-size:9px; color:#94a3b8; margin-top:3px; line-height:1.5;">
               @if(!empty($p['passportCountry']))Penerbit: {{ $p['passportCountry'] }}<br>@endif
-              @if(!empty($p['passportIssue']))Terbit: {{ $p['passportIssue'] }}@endif@if(!empty($p['passportIssue']) && !empty($p['passportExpiry'])) · @endif@if(!empty($p['passportExpiry']))Berlaku s/d: {{ $p['passportExpiry'] }}@endif
+              @if(!empty($p['passportIssue']))Terbit: {{ $p['passportIssue'] }} @endif
+              @if(!empty($p['passportExpiry']))Berlaku s/d: {{ $p['passportExpiry'] }}@endif
             </div>
           @endif
         </td>
@@ -111,14 +127,26 @@
 </div>
 @endif
 
-<div class="total-box">
-  <table>
-    <tr>
-      <td class="lbl">Total Pembayaran</td>
-      <td class="amt">Rp {{ $totalPrice }}</td>
-    </tr>
-  </table>
+@if(!empty($flightNotes))
+<div class="section">
+  <div class="section-title">Catatan Penting</div>
+  <ol style="font-size:9px; color:#475569; line-height:1.6; padding-left:16px; margin:4px 0 0;">
+    @foreach($flightNotes as $n)
+      <li>{{ $n }}</li>
+    @endforeach
+  </ol>
 </div>
+@endif
+@if(!empty($flightNotesEn))
+<div class="section">
+  <div class="section-title">Important Notes</div>
+  <ol style="font-size:9px; color:#475569; line-height:1.6; padding-left:16px; margin:4px 0 0;">
+    @foreach($flightNotesEn as $n)
+      <li>{{ $n }}</li>
+    @endforeach
+  </ol>
+</div>
+@endif
 
 <div class="footer">
   <strong>Penting:</strong> Tunjukkan e-tiket ini (cetak atau di layar) beserta identitas asli saat check-in.

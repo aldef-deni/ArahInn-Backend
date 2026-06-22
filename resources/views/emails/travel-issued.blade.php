@@ -53,8 +53,8 @@
             @foreach ($pax as $p)
               <div style="border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; margin-bottom:8px;">
                 <div style="font-size:13px; font-weight:bold; color:#1e293b;">{{ $p['name'] }} <span style="font-size:11px; color:#94a3b8; font-weight:normal;">· {{ $p['type'] }}</span></div>
-                <div style="font-size:12px; color:#64748b; margin-top:3px;">{{ $p['nationality'] }} · {{ $p['idLabel'] ?? 'NIK' }}: {{ $p['id'] ?: '—' }}</div>
-                @if(!empty($p['isForeign']) && (!empty($p['passportCountry']) || !empty($p['passportIssue']) || !empty($p['passportExpiry'])))
+                <div style="font-size:12px; color:#64748b; margin-top:3px;">{{ $p['nationality'] }} · {{ $p['idLabel'] ?? 'NIK' }}: {{ $p['id'] ?: '—' }}@if(empty($p['isForeign']) && !empty($p['passport'])) · Paspor: {{ $p['passport'] }}@endif</div>
+                @if(!empty($p['hasPassport']) && (!empty($p['passportCountry']) || !empty($p['passportIssue']) || !empty($p['passportExpiry'])))
                   <div style="font-size:11px; color:#94a3b8; margin-top:2px;">@if(!empty($p['passportCountry']))Penerbit: {{ $p['passportCountry'] }}@endif @if(!empty($p['passportIssue']))· Terbit {{ $p['passportIssue'] }}@endif @if(!empty($p['passportExpiry']))· Berlaku s/d {{ $p['passportExpiry'] }}@endif</div>
                 @endif
               </div>
@@ -62,8 +62,39 @@
           </div>
           @endif
 
+          @if(!empty($baggage))
+          <div style="margin-top:20px; padding:12px 14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;">
+            <div style="font-size:12px; color:#475569;"><strong style="color:#1e293b;">Ketentuan Bagasi:</strong> {{ $baggage }}</div>
+            <div style="margin-top:6px;">
+              <span style="display:inline-block; font-size:11px; font-weight:bold; color:#dc2626; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:3px 8px; margin-right:6px;">Non Refund</span>
+              <span style="display:inline-block; font-size:11px; font-weight:bold; color:#dc2626; background:#fef2f2; border:1px solid #fecaca; border-radius:6px; padding:3px 8px;">Non Reschedule</span>
+            </div>
+          </div>
+          @endif
+
+          @if(!empty($flightNotes))
+          <div style="margin-top:20px;">
+            <div style="font-size:13px; font-weight:bold; color:#1e293b; margin-bottom:6px;">Catatan Penting</div>
+            <ol style="font-size:12px; color:#475569; line-height:1.7; padding-left:18px; margin:0;">
+              @foreach($flightNotes as $n)
+                <li>{{ $n }}</li>
+              @endforeach
+            </ol>
+          </div>
+          @endif
+          @if(!empty($flightNotesEn))
+          <div style="margin-top:16px;">
+            <div style="font-size:13px; font-weight:bold; color:#1e293b; margin-bottom:6px;">Important Notes</div>
+            <ol style="font-size:12px; color:#475569; line-height:1.7; padding-left:18px; margin:0;">
+              @foreach($flightNotesEn as $n)
+                <li>{{ $n }}</li>
+              @endforeach
+            </ol>
+          </div>
+          @endif
+
           <p style="font-size:12px; color:#94a3b8; margin:20px 0 0; line-height:1.6;">
-            📎 <strong>E-Tiket PDF terlampir.</strong> Tunjukkan saat check-in beserta identitas asli. Datang minimal 60–90 menit sebelum keberangkatan.
+            📎 <strong>@if(($b->moda ?? '') === 'pelni')E-Tiket (PDF) terlampir.@else E-Tiket &amp; Invoice (PDF) terlampir.@endif</strong> Tunjukkan E-Tiket saat check-in beserta identitas asli. Datang minimal 60–90 menit sebelum keberangkatan.
           </p>
         </td></tr>
 

@@ -48,6 +48,20 @@ class PricingService
     }
 
     /**
+     * Komisi properti (fraksi) yang DIPOTONG dari setoran owner.
+     *   owner_payout = harga_listed × (1 − komisi). PPh sudah termasuk di komisi.
+     * Kalau commission_percent NULL → fallback default config (12%).
+     */
+    private function resolveCommission(?Room $room): float
+    {
+        $hotel = $room?->hotel;
+        if (!$hotel || $hotel->commission_percent === null) {
+            return $this->defaultMarkupPercent;
+        }
+        return (float) $hotel->commission_percent / 100;
+    }
+
+    /**
      * Hitung harga final booking
      */
     public function calculate(array $params): array
@@ -61,7 +75,9 @@ class PricingService
             'use_points'       => $usePoints,
             'points_to_redeem' => $pointsToRedeem,
             'room_count'       => $roomCount,
-        ] = array_merge(['promo_code' => null, 'user_id' => null, 'use_points' => false, 'points_to_redeem' => null, 'room_count' => 1], $params);
+            'stay_type'        => $stayType,
+            'stay_plan_index'  => $stayPlanIndex,
+        ] = array_merge(['promo_code' => null, 'user_id' => null, 'use_points' => false, 'points_to_redeem' => null, 'room_count' => 1, 'stay_type' => 'daily', 'stay_plan_index' => 0], $params);
 
         // Sertakan kolom category + lokasi → dibutuhkan untuk cek KONDISI promo
         // (jenis akomodasi & lokasi). Tanpa ini category null → promo selalu ditolak.
@@ -75,17 +91,35 @@ class PricingService
             throw new \InvalidArgumentException('Tanggal checkout harus setelah check-in.');
         }
 
-        // 1. Base price = sum harga per tanggal × jumlah kamar.
-        //    Owner bisa override harga per tanggal lewat "Atur Harga & Ketersediaan"
-        //    (kolom room_prices.price). Kalau tidak di-set, pakai room.base_price.
-        //    TIDAK ADA weekend premium otomatis — owner bisa set harga weekend sendiri.
-        $basePrice = $this->calculateBasePrice($room, $ciDate, $coDate) * $roomCount;
+        // Long-stay: harga TETAP per kamar (mingguan 7 mlm / bulanan 30 mlm),
+        // di-set owner/superadmin. TIDAK dari harga harian, TIDAK kena promo/campaign/rate-plan.
+        $isLongStay       = in_array($stayType, ['weekly', 'monthly'], true);
+        $ratePlan         = null;
+        $ratePlanModifier = 1.0;
+        $stayPlanLabel    = null;
 
-        // 1b. Rate plan: pilih plan yang berlaku → apply multiplier × (1 − discount%)
-        $ratePlan         = RatePlan::pickApplicable($room->hotel_id, $room->id, $nights, $checkIn, $checkOut);
-        $ratePlanModifier = $ratePlan ? $ratePlan->priceModifier() : 1.0;
-        if ($ratePlanModifier !== 1.0) {
-            $basePrice = round($basePrice * $ratePlanModifier, 2);
+        if ($isLongStay) {
+            // Opsi/varian menginap lama (mis. "Tanpa IPL" / "Termasuk IPL") — pilih per index.
+            $plans = $room->longStayPlans($stayType);
+            $idx   = max(0, (int) $stayPlanIndex);
+            $plan  = $plans[$idx] ?? ($plans[0] ?? null);
+            if (!$plan) {
+                throw new \InvalidArgumentException('Harga ' . ($stayType === 'weekly' ? 'mingguan' : 'bulanan') . ' belum tersedia untuk kamar ini.');
+            }
+            $stayPlanLabel = $plan['label'];
+            $basePrice     = round((float) $plan['price'] * $roomCount, 2);
+        } else {
+            // 1. Base price = sum harga per tanggal × jumlah kamar.
+            //    Owner bisa override harga per tanggal lewat "Atur Harga & Ketersediaan"
+            //    (kolom room_prices.price). Kalau tidak di-set, pakai room.base_price.
+            $basePrice = $this->calculateBasePrice($room, $ciDate, $coDate) * $roomCount;
+
+            // 1b. Rate plan: pilih plan yang berlaku → apply multiplier × (1 − discount%)
+            $ratePlan         = RatePlan::pickApplicable($room->hotel_id, $room->id, $nights, $checkIn, $checkOut);
+            $ratePlanModifier = $ratePlan ? $ratePlan->priceModifier() : 1.0;
+            if ($ratePlanModifier !== 1.0) {
+                $basePrice = round($basePrice * $ratePlanModifier, 2);
+            }
         }
 
         // Simpan harga sebelum promo untuk display "Rp X coret → Rp Y"
@@ -96,48 +130,58 @@ class PricingService
         //    dihitung dari base price, bukan subtotal).
         $hotelOwnerId = $room->hotel->owner_id ?? null;
 
-        // 2a. Diskon CAMPAIGN otomatis (owner mengikuti campaign / promo platform) —
-        //     SELALU dihitung, tidak hilang walau ada kode promo manual.
+        // Long-stay (mingguan/bulanan) DIKECUALIKAN dari semua promo & campaign.
         $campaignDiscount = 0;
         $campaign = null;
-        if ($hotelOwnerId) {
-            $best = \App\Services\OwnerDiscountService::best($hotelOwnerId, $basePrice);
-            if ($best) {
-                $campaignDiscount = $best['discount'];
-                $campaign         = $best['campaign'];  // null kalau sumbernya promo-follow
+        $codeDiscount = 0;
+        $promo = null;
+        if (!$isLongStay) {
+            // 2a. Diskon CAMPAIGN otomatis (owner mengikuti campaign / promo platform) —
+            //     SELALU dihitung, tidak hilang walau ada kode promo manual.
+            if ($hotelOwnerId) {
+                $best = \App\Services\OwnerDiscountService::best($hotelOwnerId, $basePrice);
+                if ($best) {
+                    $campaignDiscount = $best['discount'];
+                    $campaign         = $best['campaign'];  // null kalau sumbernya promo-follow
+                }
             }
+            // 2b. Diskon KODE PROMO manual (kalau ada) — DI-STACK di atas diskon campaign.
+            [$codeDiscount, $promo] = $this->applyPromo($promoCode, $basePrice, $hotelOwnerId, $room->hotel, $checkIn);
         }
-
-        // 2b. Diskon KODE PROMO manual (kalau ada) — DI-STACK di atas diskon campaign.
-        [$codeDiscount, $promo] = $this->applyPromo($promoCode, $basePrice, $hotelOwnerId, $room->hotel, $checkIn);
 
         // Total diskon = campaign + kode, dibatasi agar tidak melebihi harga.
         $promoDiscount = min($campaignDiscount + $codeDiscount, $originalBasePrice);
         $basePrice = round(max(0, $originalBasePrice - $promoDiscount), 2);
 
-        // 3. Markup "Pajak & Others" = komisi properti + 2% PPh
-        //    Dihitung dari base price POST-promo, jadi customer dapat manfaat
-        //    diskon di markup juga.
-        $markupPercent = $this->resolveMarkup($room);
-        $markupAmount  = round($basePrice * $markupPercent, 2);
-        $subtotal      = $basePrice + $markupAmount;
+        // 3. Biaya Layanan (tampil ke customer sbg "Pajak & Others") — DITAMBAHKAN ke total.
+        //    Dari setting superadmin: persen (dari harga POST-promo) ATAU nominal flat.
+        //    Long-stay (mingguan/bulanan): TANPA biaya layanan — customer bayar harga tetap.
+        if ($isLongStay) {
+            $serviceFee = 0.0;
+        } else {
+            $sf = \App\Http\Controllers\Admin\SettingController::accommodationServiceFee();
+            $serviceFee = ((float) ($sf['percent'] ?? 0)) > 0
+                ? round($basePrice * ((float) $sf['percent'] / 100), 2)   // persen dari harga setelah promo
+                : (float) ($sf['amount'] ?? 0);                            // nominal flat
+        }
+        $markupAmount = $serviceFee;            // disimpan di kolom markup_amount → baris "Pajak & Others"
+        $subtotal     = $basePrice + $serviceFee;
 
-        // ── Skema BEBAN DISKON (untuk laporan komisi/laba) ──────────────────
-        // Siapa bikin diskon, dia yang nanggung. Harga customer TIDAK berubah.
-        //   D_a = diskon ArahInn (campaign + promo owner_id NULL)
-        //   D_o = diskon owner   (promo owner_id terisi)
-        //   owner_payout      = N − D_o*(1+m)        → owner cuma nanggung diskonnya
-        //   commission_profit = N*c − D_a*(1+m)      → ArahInn nanggung diskonnya (bisa minus = nalangin)
-        // N = originalBasePrice (sebelum promo), m = markup, c = komisi murni (m − 2% PPh)
+        // ── Setoran owner & laba platform ───────────────────────────────────
+        //   Komisi properti DIPOTONG dari setoran owner (BUKAN ditambah ke customer).
+        //   owner_payout = harga_listed × (1 − komisi%) − diskon yang ditanggung owner
+        //   (PPh sudah termasuk di dalam komisi — internal platform, tak tampil ke customer)
+        //   Laba platform = komisi dari owner + biaya layanan − diskon yang ditanggung ArahInn
+        $commissionRate = $isLongStay ? 0.0 : $this->resolveCommission($room);  // mis. 0.15
+
         $promoIsOwner = $promo && $promo->owner_id !== null;
         $rawDiscTotal = $campaignDiscount + $codeDiscount;
         $discScale    = $rawDiscTotal > 0 ? ($promoDiscount / $rawDiscTotal) : 0; // ≤1 bila ke-cap
         $discountOwner   = round(($promoIsOwner ? $codeDiscount : 0) * $discScale, 2);
         $discountArahinn = round(($campaignDiscount + ($promoIsOwner ? 0 : $codeDiscount)) * $discScale, 2);
 
-        $commissionFrac   = max(0, $markupPercent - (self::PPH_PERCENT / 100)); // komisi murni
-        $ownerPayout      = round(max(0, $originalBasePrice - $discountOwner * (1 + $markupPercent)), 2);
-        $commissionProfit = round($originalBasePrice * $commissionFrac - $discountArahinn * (1 + $markupPercent), 2);
+        $ownerPayout      = round(max(0, $originalBasePrice * (1 - $commissionRate) - $discountOwner), 2);
+        $commissionProfit = round($originalBasePrice * $commissionRate + $serviceFee - $discountArahinn, 2);
 
         // Kept for compatibility (occupancy_rate masih dilaporkan di breakdown)
         $occupancyRate = $this->getOccupancyRate($roomId, $checkIn, $checkOut, $room->total_units);
@@ -154,17 +198,20 @@ class PricingService
             $subtotal       -= $loyaltyDiscount;
         }
 
-        // 6. Pajak PPN — hanya kalau di-enable superadmin
-        $taxAmount = $this->taxEnabled
+        // 6. Pajak PPN — hanya kalau di-enable superadmin & BUKAN long-stay
+        //    (mingguan/bulanan tanpa pajak — customer bayar harga tetap).
+        $taxAmount = (!$isLongStay && $this->taxEnabled)
             ? round($subtotal * $this->taxPercent, 2)
             : 0.0;
 
-        // 7. Random 3-digit suffix (001–999) untuk transfer unik
-        $priceSuffix = random_int(1, 999);
+        // 7. Kode unik 3-digit untuk transfer (di-skip utk long-stay agar total = harga tetap)
+        $priceSuffix = $isLongStay ? 0 : random_int(1, 999);
         $totalPrice  = (int) ceil($subtotal + $taxAmount) + $priceSuffix;
 
         return [
             'nights'                => $nights,
+            'stay_type'             => $stayType,
+            'stay_plan_label'       => $stayPlanLabel,
             'original_base_price'   => round($originalBasePrice, 2),  // sebelum diskon promo
             'base_price'            => round($basePrice, 2),           // setelah diskon promo
             'markup_amount'         => round($markupAmount, 2),

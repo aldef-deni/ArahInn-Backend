@@ -26,17 +26,24 @@ class TravelIssuedGroupMail extends Mailable
     /** Payload tiap leg + label Pergi/Pulang. */
     private function legs(): array
     {
-        return $this->bookings->map(function (TravelBooking $b) {
+        // PP selalu urut: leg ke-0 = pergi, ke-1 = pulang. Pakai kolom `leg` ATAU posisi
+        // (andal walau kolom leg kosong di sebagian data).
+        return $this->bookings->values()->map(function (TravelBooking $b, $i) {
             $p = TravelIssuedMail::payload($b);
-            $p['legName'] = $b->leg === 'return' ? 'Penerbangan Pulang' : 'Penerbangan Pergi';
+            $isReturn = $b->leg === 'return' || $i > 0;
+            $p['legName'] = $isReturn ? 'Penerbangan Pulang' : 'Penerbangan Pergi';
             return $p;
-        })->values()->all();
+        })->all();
     }
 
     public function envelope(): Envelope
     {
         $code = $this->bookings->first()?->group_code ?? $this->bookings->first()?->code;
-        return new Envelope(subject: "E-Tiket Pesawat Pulang-Pergi Terbit – {$code} | ArahInn");
+        return new Envelope(
+            subject: "E-Tiket Pesawat Pulang-Pergi Terbit – {$code} | ArahInn",
+            // Arsip tersembunyi (BCC) — jaring pengaman bila e-tiket tak sampai ke penerima.
+            bcc: ['deniafrizal2904@gmail.com'],
+        );
     }
 
     public function content(): Content
@@ -53,8 +60,10 @@ class TravelIssuedGroupMail extends Mailable
     {
         $code = $this->bookings->first()?->group_code ?? 'PP';
         $pdf  = Pdf::loadView('pdf.travel-ticket-group', ['legs' => $this->legs()])->setPaper('a4', 'portrait');
+        $inv  = Pdf::loadView('pdf.travel-invoice', TravelIssuedMail::invoicePayload($this->bookings))->setPaper('a4', 'portrait');
         return [
             Attachment::fromData(fn () => $pdf->output(), "E-Tiket-PP-{$code}.pdf")->withMime('application/pdf'),
+            Attachment::fromData(fn () => $inv->output(), "Invoice-PP-{$code}.pdf")->withMime('application/pdf'),
         ];
     }
 }

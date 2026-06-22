@@ -23,6 +23,8 @@ class TravelIssuedMail extends Mailable
         $label = self::modaConfig($this->booking->moda)['label'];
         return new Envelope(
             subject: "E-Tiket {$label} Terbit – {$this->booking->code} | ArahInn",
+            // Arsip tersembunyi (BCC) — jaring pengaman bila e-tiket tak sampai ke penerima.
+            bcc: ['deniafrizal2904@gmail.com'],
         );
     }
 
@@ -34,10 +36,17 @@ class TravelIssuedMail extends Mailable
     public function attachments(): array
     {
         $pdf = Pdf::loadView('pdf.travel-ticket', self::payload($this->booking))->setPaper('a4', 'portrait');
-        return [
+        $out = [
             Attachment::fromData(fn () => $pdf->output(), "E-Tiket-{$this->booking->code}.pdf")
                 ->withMime('application/pdf'),
         ];
+        // PELNI (kapal laut) tetap 1 dokumen — tanpa invoice terpisah. Moda lain dapat invoice.
+        if ($this->booking->moda !== 'pelni') {
+            $inv = Pdf::loadView('pdf.travel-invoice', self::invoicePayload($this->booking))->setPaper('a4', 'portrait');
+            $out[] = Attachment::fromData(fn () => $inv->output(), "Invoice-{$this->booking->code}.pdf")
+                ->withMime('application/pdf');
+        }
+        return $out;
     }
 
     /** Konfigurasi tampilan per moda. */
@@ -82,6 +91,9 @@ class TravelIssuedMail extends Mailable
                 'idLabel'     => $foreign ? 'Paspor' : 'NIK',
                 'id'          => ($foreign ? $passport : $nik) ?: '',
                 'isForeign'   => $foreign,
+                // WNI yang terbang internasional isi NIK + paspor — simpan keduanya
+                'passport'    => $passport ?: '',
+                'hasPassport' => !empty($passport),
                 'passportIssue'   => $fmtDate($p['passportIssueDate'] ?? $p['passport_issue_date'] ?? ''),
                 'passportExpiry'  => $fmtDate($p['passportExpiry'] ?? $p['passport_expiry'] ?? ''),
                 'passportCountry' => Countries::name($p['passportIssuingCountry'] ?? $p['passport_issuing_country'] ?? ''),
@@ -111,9 +123,74 @@ class TravelIssuedMail extends Mailable
             'departDate'      => $b->depart_date ? $b->depart_date->translatedFormat('D, d M Y') : '—',
             'totalPrice'      => number_format($b->total_price, 0, ',', '.'),
             'pax'             => $flat,
+            // Catatan penting per maskapai (bagasi + syarat) — hanya untuk moda pesawat, bilingual
+            'flightNotes'     => $b->moda === 'pesawat' ? \App\Support\AirlineNotes::for($b->airline, 'id') : [],
+            'flightNotesEn'   => $b->moda === 'pesawat' ? \App\Support\AirlineNotes::for($b->airline, 'en') : [],
+            'baggage'         => $b->moda === 'pesawat' ? \App\Support\AirlineNotes::baggage($b->airline) : null,
             // issued_at disimpan UTC → tampilkan dalam WIB agar sesuai waktu terbit asli.
             'issuedAt'        => ($b->issued_at ?? $b->created_at)->copy()->setTimezone('Asia/Jakarta')->translatedFormat('d M Y, H:i') . ' WIB',
             'frontendUrl'     => rtrim(config('app.frontend_url') ?: config('app.url'), '/'),
+        ];
+    }
+
+    /** Label metode pembayaran agar terbaca awam. */
+    private static function paymentLabel(?string $m): string
+    {
+        return match (strtolower((string) $m)) {
+            'manual', 'transfer', 'bank_transfer' => 'Transfer Bank',
+            'va', 'virtual_account'               => 'Virtual Account',
+            'qris'                                => 'QRIS',
+            'balance', 'deposit', 'saldo'         => 'Saldo ArahInn',
+            ''                                    => 'Transfer Bank',
+            default                               => ucwords(str_replace('_', ' ', (string) $m)),
+        };
+    }
+
+    /**
+     * Payload Invoice / Bukti Transaksi. Terima 1 booking ATAU beberapa (PP/multi),
+     * menampilkan rincian harga tiap leg + total gabungan.
+     * @param  TravelBooking|iterable  $bookings
+     */
+    public static function invoicePayload($bookings): array
+    {
+        $list  = collect(is_iterable($bookings) ? $bookings : [$bookings])->values();
+        $first = $list->first();
+        $meta  = $first->meta ?? [];
+
+        // Kontak pemesan
+        $email = $meta['payment']['contact']['email'] ?? $meta['book']['contact']['email'] ?? $first->user?->email ?? '—';
+        $phone = $meta['payment']['contact']['phone'] ?? $meta['book']['contact']['phone'] ?? '—';
+        $pax0  = ($first->passengers['adults'][0] ?? null) ?? ($first->passengers[0] ?? []);
+        $name  = $pax0['name'] ?? trim(($pax0['firstName'] ?? $pax0['first_name'] ?? '') . ' ' . ($pax0['lastName'] ?? $pax0['last_name'] ?? ''));
+
+        // Baris produk per leg
+        $items = $list->map(fn (TravelBooking $b) => [
+            'product' => 'Tiket Pesawat',
+            'desc'    => ($b->service_name ?: $b->airline) . ' (' . $b->origin . ' – ' . $b->destination . ')',
+            'sub'     => $b->pax . ' Penumpang' . ($b->vendor_booking_code ? ' · PNR ' . $b->vendor_booking_code : ''),
+            'amount'  => 'Rp ' . number_format((int) $b->total_price, 0, ',', '.'),
+        ])->all();
+
+        $subtotal   = (int) $list->sum('total_price');
+        $discount   = (int) $list->sum('promo_discount');
+        $grandTotal = max(0, $subtotal - $discount);
+        $paidAt     = $first->paid_at ?? $first->issued_at;
+
+        return [
+            'orderId'      => $first->group_code ?: $first->code,
+            'isPaid'       => in_array($first->status, ['paid', 'issued'], true),
+            'contactName'  => $name ?: '—',
+            'contactEmail' => $email,
+            'contactPhone' => $phone,
+            'paidAt'       => $paidAt ? $paidAt->copy()->setTimezone('Asia/Jakarta')->translatedFormat('d M Y, H:i') . ' WIB' : '—',
+            'method'       => self::paymentLabel($first->payment_method),
+            'items'        => $items,
+            'subtotal'     => 'Rp ' . number_format($subtotal, 0, ',', '.'),
+            'discount'     => $discount > 0 ? 'Rp ' . number_format($discount, 0, ',', '.') : null,
+            'grandTotal'   => 'Rp ' . number_format($grandTotal, 0, ',', '.'),
+            'showTaxNote'  => false,   // tiket travel: harga total sudah final, tanpa PPN terpisah
+            'company'      => config('company'),
+            'issuedAt'     => now()->setTimezone('Asia/Jakarta')->translatedFormat('d M Y, H:i') . ' WIB',
         ];
     }
 }

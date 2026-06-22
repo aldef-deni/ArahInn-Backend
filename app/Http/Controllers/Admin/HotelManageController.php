@@ -76,6 +76,7 @@ class HotelManageController extends Controller
         }
 
         $data['images'] = $this->uploadImages($request, []);
+        $data['voucher_emails'] = $this->parseVoucherEmails($request);
 
         $hotel = Hotel::create($data);
         ActivityLogService::log($request->user()->id, 'ADMIN_CREATE_HOTEL', 'hotel', $hotel->id, $request);
@@ -114,6 +115,12 @@ class HotelManageController extends Controller
             $existingImages = json_decode($existingImages, true) ?? [];
         }
         $data['images'] = $this->uploadImages($request, (array) $existingImages);
+
+        // Email penerima voucher (editable langsung dari drawer admin). Hanya
+        // diubah bila dikirim, agar update lain tak menghapusnya.
+        if ($request->has('voucher_emails')) {
+            $data['voucher_emails'] = $this->parseVoucherEmails($request);
+        }
 
         $hotel->update($data);
         ActivityLogService::log($request->user()->id, 'ADMIN_UPDATE_HOTEL', 'hotel', $id, $request);
@@ -234,5 +241,30 @@ class HotelManageController extends Controller
         }
 
         return $urls;
+    }
+
+    /**
+     * Bersihkan daftar email penerima voucher dari request (JSON string, CSV, atau array).
+     * Lowercase, validasi format, unik. Kosong → null.
+     */
+    private function parseVoucherEmails(Request $request): ?array
+    {
+        $ve = $request->input('voucher_emails');
+        if (is_string($ve)) {
+            $decoded = json_decode($ve, true);
+            $ve = is_array($decoded)
+                ? $decoded
+                : array_filter(array_map('trim', explode(',', $ve)));
+        }
+        if (!is_array($ve)) return null;
+
+        $clean = collect($ve)
+            ->map(fn ($e) => is_string($e) ? strtolower(trim($e)) : null)
+            ->filter(fn ($e) => $e && filter_var($e, FILTER_VALIDATE_EMAIL))
+            ->unique()
+            ->values()
+            ->all();
+
+        return empty($clean) ? null : $clean;
     }
 }

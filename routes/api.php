@@ -192,6 +192,15 @@ Route::middleware('auth:sanctum')->group(function () {
     // Hapus akun (wajib Apple App Store guideline 5.1.1(v) — account deletion in-app)
     Route::delete('/auth/account', [AuthController::class, 'deleteAccount']);
 
+    // ── Wishlist (customer: simpan hotel & properti favorit) ──
+    Route::prefix('wishlist')->group(function () {
+        Route::get('/',        [\App\Http\Controllers\WishlistController::class, 'index']);
+        Route::get('/ids',     [\App\Http\Controllers\WishlistController::class, 'ids']);
+        Route::get('/config',  [\App\Http\Controllers\WishlistController::class, 'config']);
+        Route::post('/toggle', [\App\Http\Controllers\WishlistController::class, 'toggle']);
+        Route::delete('/{id}', [\App\Http\Controllers\WishlistController::class, 'destroy']);
+    });
+
     // ── Property Listings (Owner) ─────────────────────
     Route::prefix('properties')->middleware('role:owner|admin|superadmin')->group(function () {
         Route::post('/',      [PropertyListingController::class, 'store']);
@@ -446,6 +455,12 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('/{id}',[CampaignController::class, 'destroy']);
         });
 
+        // Wishlist config (superadmin)
+        Route::get('/settings/wishlist',  [SettingController::class, 'getWishlistConfig'])
+            ->middleware('role:superadmin');
+        Route::post('/settings/wishlist', [SettingController::class, 'setWishlistConfig'])
+            ->middleware('role:superadmin');
+
         Route::get('/settings/payment-gateways',  [SettingController::class, 'getGateways'])
             ->middleware('role:superadmin');
         Route::post('/settings/payment-gateways', [SettingController::class, 'setGateway'])
@@ -477,6 +492,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/settings/travel-markup',  [SettingController::class, 'getTravelMarkup'])
             ->middleware('role:superadmin');
         Route::post('/settings/travel-markup', [SettingController::class, 'setTravelMarkup'])
+            ->middleware('role:superadmin');
+
+        // Biaya layanan akomodasi (superadmin only)
+        Route::get('/settings/accommodation-service-fee',  [SettingController::class, 'getAccommodationServiceFee'])
+            ->middleware('role:superadmin');
+        Route::post('/settings/accommodation-service-fee', [SettingController::class, 'setAccommodationServiceFee'])
             ->middleware('role:superadmin');
 
         // Nomor WA konsultasi Design Interior (superadmin/admin/design_interior)
