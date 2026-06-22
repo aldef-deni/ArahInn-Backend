@@ -565,6 +565,36 @@ class TravelBookingController extends Controller
      * Admin list travel bookings (filter status). Untuk verifikasi pembayaran manual.
      * GET /admin/travel/bookings?status=pending_payment
      */
+    /**
+     * Hapus massal pesanan tiket travel (HARD DELETE).
+     * GATE KERAS: hanya akun superadmin email aldeftech@gmail.com.
+     */
+    public function adminBulkDestroy(Request $request)
+    {
+        $user = $request->user();
+        if (!$user || strtolower(trim((string) $user->email)) !== 'aldeftech@gmail.com') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Fitur hapus pesanan khusus akun tertentu.',
+            ], 403);
+        }
+
+        $data = $request->validate([
+            'ids'   => 'required|array|min:1',
+            'ids.*' => 'integer',
+        ]);
+        $ids = array_values(array_unique(array_map('intval', $data['ids'])));
+
+        // travel_bookings = tabel leaf (tak ada FK child) → aman langsung hapus.
+        $deleted = TravelBooking::whereIn('id', $ids)->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Berhasil menghapus {$deleted} pesanan tiket travel.",
+            'deleted' => $deleted,
+        ]);
+    }
+
     public function adminBookings(Request $request)
     {
         $q = TravelBooking::with('user:id,name,email')->latest();

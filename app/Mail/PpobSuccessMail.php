@@ -31,10 +31,44 @@ class PpobSuccessMail extends Mailable
 
     public function attachments(): array
     {
-        $pdf = Pdf::loadView('pdf.ppob-receipt', self::payload($this->trx))->setPaper('a4', 'portrait');
+        // 2 dokumen: E-Struk (bukti pengiriman + token/SN) & Invoice (bukti pembayaran).
+        $struk   = Pdf::loadView('pdf.ppob-receipt', self::payload($this->trx))->setPaper('a4', 'portrait');
+        $invoice = Pdf::loadView('pdf.ppob-invoice', self::invoicePayload($this->trx))->setPaper('a4', 'portrait');
+
         return [
-            Attachment::fromData(fn () => $pdf->output(), "E-Struk-{$this->trx->trx_code}.pdf")
+            Attachment::fromData(fn () => $struk->output(), "E-Struk-{$this->trx->trx_code}.pdf")
                 ->withMime('application/pdf'),
+            Attachment::fromData(fn () => $invoice->output(), "Invoice-{$this->trx->trx_code}.pdf")
+                ->withMime('application/pdf'),
+        ];
+    }
+
+    /** Payload Invoice / Bukti Transaksi PPOB (rincian harga + pembayaran). */
+    public static function invoicePayload(PpobTransaction $trx): array
+    {
+        $trx->loadMissing(['user', 'category']);
+        $rupiah = fn ($v) => 'Rp ' . number_format((float) $v, 0, ',', '.');
+        $paidAt = $trx->paid_at ?? $trx->completed_at ?? $trx->created_at;
+        $total  = (float) $trx->total_amount;
+
+        return [
+            'orderId'       => $trx->trx_code,
+            'isPaid'        => $trx->status === 'success',
+            'contactName'   => $trx->user?->name  ?: '—',
+            'contactEmail'  => $trx->user?->email ?: '—',
+            'contactPhone'  => $trx->user?->phone ?: '—',
+            'paidAt'        => $paidAt ? $paidAt->copy()->setTimezone('Asia/Jakarta')->translatedFormat('d M Y, H:i') . ' WIB' : '—',
+            'method'        => 'Transfer Bank',   // flow PPOB = manual transfer (verifikasi admin)
+            'productType'   => $trx->category?->name ?: 'Top Up & Tagihan',
+            'itemDesc'      => $trx->product_name,
+            'itemSub'       => 'No. Pelanggan: ' . $trx->customer_number
+                                . ($trx->serial_number ? ' · SN/Token: ' . $trx->serial_number : ''),
+            'subtotal'      => $rupiah($total),
+            'adminIncluded' => (float) $trx->admin_fee > 0,
+            'grandTotal'    => $rupiah($total),
+            'showTaxNote'   => false,   // PPOB tanpa PPN terpisah
+            'company'       => config('company'),
+            'issuedAt'      => now()->setTimezone('Asia/Jakarta')->translatedFormat('d M Y, H:i') . ' WIB',
         ];
     }
 

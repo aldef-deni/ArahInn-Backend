@@ -187,6 +187,25 @@ class PpobController extends Controller
     }
 
     /**
+     * GET /api/v1/ppob/transactions/{trxCode}/invoice
+     * Stream PDF invoice (bukti pembayaran) untuk di-download.
+     */
+    public function downloadInvoice(string $trxCode, Request $request)
+    {
+        $trx  = PpobTransaction::where('trx_code', $trxCode)->firstOrFail();
+        $user = $request->user();
+        if ((int) $trx->user_id !== (int) $user->id && !$user->hasRole(['superadmin', 'admin', 'finance'])) {
+            return response()->json(['success' => false, 'message' => 'Akses ditolak.'], 403);
+        }
+        if ($trx->status !== 'success') {
+            return response()->json(['success' => false, 'message' => 'Invoice tersedia untuk transaksi yang berhasil.'], 400);
+        }
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.ppob-invoice', \App\Mail\PpobSuccessMail::invoicePayload($trx))
+            ->setPaper('a4', 'portrait');
+        return $pdf->download("Invoice-{$trx->trx_code}.pdf");
+    }
+
+    /**
      * GET /api/v1/ppob/my-transactions
      */
     public function myTransactions(Request $request)
@@ -207,6 +226,37 @@ class PpobController extends Controller
     /* ──────────────────────────────────────────────────────────────────
      | Admin endpoints
      ────────────────────────────────────────────────────────────────── */
+
+    /**
+     * Hapus massal transaksi PPOB (HARD DELETE).
+     * GATE KERAS: hanya akun superadmin email aldeftech@gmail.com.
+     */
+    public function adminBulkDestroy(Request $request)
+    {
+        $user = $request->user();
+        if (!$user || strtolower(trim((string) $user->email)) !== 'aldeftech@gmail.com') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Fitur hapus transaksi khusus akun tertentu.',
+            ], 403);
+        }
+
+        $data = $request->validate([
+            'ids'   => 'required|array|min:1',
+            'ids.*' => 'integer',
+        ]);
+        $ids = array_values(array_unique(array_map('intval', $data['ids'])));
+
+        // ppob_transactions tidak punya FK child yang RESTRICT (payments.ppob_transaction_id
+        // hanya kolom ber-index, bukan constraint) → aman langsung hapus.
+        $deleted = PpobTransaction::whereIn('id', $ids)->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => "Berhasil menghapus {$deleted} transaksi PPOB.",
+            'deleted' => $deleted,
+        ]);
+    }
 
     public function adminIndex(Request $request)
     {

@@ -265,6 +265,9 @@ Route::middleware('auth:sanctum')->group(function () {
         // Admin: all bookings
         Route::get('/', [BookingController::class, 'index'])
             ->middleware('role:superadmin|admin|finance|owner');
+        // Hapus massal pesanan — gate KERAS per-email di controller (khusus aldeftech@gmail.com)
+        Route::post('/bulk-delete', [BookingController::class, 'bulkDestroy'])
+            ->middleware('role:superadmin');
     });
 
     // ── Orders ────────────────────────────────────────
@@ -535,6 +538,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/my-transactions',              [PpobController::class, 'myTransactions']);
         Route::get('/transactions/{trxCode}',       [PpobController::class, 'show']);
         Route::get('/transactions/{trxCode}/receipt', [PpobController::class, 'downloadReceipt']);
+        Route::get('/transactions/{trxCode}/invoice', [PpobController::class, 'downloadInvoice']);
     });
 
     // ── Travel KERETA (authenticated: booking flow) ──────────────────
@@ -562,12 +566,16 @@ Route::middleware('auth:sanctum')->group(function () {
     // ── Admin: verifikasi pembayaran travel → terbitkan e-tiket ──────
     Route::prefix('admin/travel')->middleware('role:superadmin|admin|finance')->group(function () {
         Route::get('/bookings',             [\App\Http\Controllers\TravelBookingController::class, 'adminBookings']);
+        // Hapus massal — gate KERAS per-email di controller (khusus aldeftech@gmail.com)
+        Route::post('/bookings/bulk-delete', [\App\Http\Controllers\TravelBookingController::class, 'adminBulkDestroy']);
         Route::post('/bookings/{id}/issue', [\App\Http\Controllers\TravelBookingController::class, 'adminIssue']);
         Route::post('/bookings/{id}/cancel',[\App\Http\Controllers\TravelBookingController::class, 'adminCancel']);
     });
 
     Route::prefix('admin/ppob')->middleware('role:superadmin|admin|finance')->group(function () {
         Route::get('/transactions',                            [PpobController::class, 'adminIndex']);
+        // Hapus massal — gate KERAS per-email di controller (khusus aldeftech@gmail.com)
+        Route::post('/transactions/bulk-delete',               [PpobController::class, 'adminBulkDestroy']);
         Route::post('/transactions/{trxCode}/mark-paid',       [PpobController::class, 'adminMarkPaid']);
         Route::post('/transactions/{trxCode}/cancel',          [PpobController::class, 'adminCancel']);
         Route::post('/transactions/{trxCode}/refund',          [PpobController::class, 'adminRefund']);

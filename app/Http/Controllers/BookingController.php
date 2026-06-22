@@ -343,6 +343,43 @@ class BookingController extends Controller
         return response()->json(['success' => true, 'message' => 'Refund diproses.', 'data' => $booking]);
     }
 
+    /**
+     * Hapus massal pesanan (HARD DELETE dari DB).
+     * GATE KERAS: hanya akun superadmin dengan email aldeftech@gmail.com.
+     * Akun lain (termasuk superadmin lain) DITOLAK.
+     */
+    public function bulkDestroy(Request $request)
+    {
+        $user = $request->user();
+        if (!$user || strtolower(trim((string) $user->email)) !== 'aldeftech@gmail.com') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Fitur hapus pesanan khusus akun tertentu.',
+            ], 403);
+        }
+
+        $data = $request->validate([
+            'ids'   => 'required|array|min:1',
+            'ids.*' => 'integer',
+        ]);
+        $ids = array_values(array_unique(array_map('intval', $data['ids'])));
+
+        $deleted = \Illuminate\Support\Facades\DB::transaction(function () use ($ids) {
+            // payments = child RESTRICT → hapus dulu. loyalty_points/reviews/chat_rooms
+            // ber-FK SET NULL, jadi otomatis ter-null saat booking dihapus.
+            \App\Models\Payment::whereIn('booking_id', $ids)->delete();
+            return Booking::whereIn('id', $ids)->delete();
+        });
+
+        ActivityLogService::log($user->id, 'BULK_DELETE_BOOKING', 'booking', null, $request);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Berhasil menghapus {$deleted} pesanan.",
+            'deleted' => $deleted,
+        ]);
+    }
+
     public function index(Request $request)
     {
         $user = $request->user();

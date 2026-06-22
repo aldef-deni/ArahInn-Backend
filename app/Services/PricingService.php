@@ -169,9 +169,11 @@ class PricingService
 
         // ── Setoran owner & laba platform ───────────────────────────────────
         //   Komisi properti DIPOTONG dari setoran owner (BUKAN ditambah ke customer).
-        //   owner_payout = harga_listed × (1 − komisi%) − diskon yang ditanggung owner
+        //   Basis komisi = harga listed DIKURANGI diskon ArahInn saja:
+        //     • Promo/campaign ARAHINN → owner menanggung: (harga − promoArahinn) × (1 − komisi)
+        //     • Promo OWNER            → owner TIDAK menanggung (basis = harga listed penuh):
+        //                                 harga × (1 − komisi)   → promo owner diserap ArahInn
         //   (PPh sudah termasuk di dalam komisi — internal platform, tak tampil ke customer)
-        //   Laba platform = komisi dari owner + biaya layanan − diskon yang ditanggung ArahInn
         $commissionRate = $isLongStay ? 0.0 : $this->resolveCommission($room);  // mis. 0.15
 
         $promoIsOwner = $promo && $promo->owner_id !== null;
@@ -180,8 +182,11 @@ class PricingService
         $discountOwner   = round(($promoIsOwner ? $codeDiscount : 0) * $discScale, 2);
         $discountArahinn = round(($campaignDiscount + ($promoIsOwner ? 0 : $codeDiscount)) * $discScale, 2);
 
-        $ownerPayout      = round(max(0, $originalBasePrice * (1 - $commissionRate) - $discountOwner), 2);
-        $commissionProfit = round($originalBasePrice * $commissionRate + $serviceFee - $discountArahinn, 2);
+        // Basis komisi = harga − diskon ArahInn (diskon owner TIDAK mengurangi basis).
+        $commissionBase   = max(0, $originalBasePrice - $discountArahinn);
+        $ownerPayout      = round($commissionBase * (1 - $commissionRate), 2);
+        // Laba ArahInn = yang dibayar customer untuk kamar (post-promo) − setoran owner + biaya layanan.
+        $commissionProfit = round($basePrice - $ownerPayout + $serviceFee, 2);
 
         // Kept for compatibility (occupancy_rate masih dilaporkan di breakdown)
         $occupancyRate = $this->getOccupancyRate($roomId, $checkIn, $checkOut, $room->total_units);
