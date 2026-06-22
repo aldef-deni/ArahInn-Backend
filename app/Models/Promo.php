@@ -11,7 +11,7 @@ class Promo extends Model
         'discount_type', 'discount_value',
         'min_purchase', 'max_discount', 'quota', 'used_count',
         'start_date', 'end_date', 'is_active', 'created_by', 'owner_id', 'hotel_id',
-        'day_type', 'hotel_types', 'location', 'product_types',
+        'day_type', 'hotel_types', 'location', 'product_types', 'stay_types',
     ];
 
     protected $casts = [
@@ -23,6 +23,7 @@ class Promo extends Model
         'end_date' => 'datetime',
         'hotel_types' => 'array',
         'product_types' => 'array',
+        'stay_types' => 'array',
     ];
 
     protected $attributes = [
@@ -113,8 +114,29 @@ class Promo extends Model
      * Return pesan error kalau TIDAK memenuhi, atau null kalau lolos/tidak ada kondisi.
      * Kondisi yang kosong = tidak diterapkan.
      */
-    public function conditionError(?Hotel $hotel, ?string $checkIn, string $productType = 'accommodation'): ?string
+    /**
+     * Apakah promo berlaku untuk tipe menginap tertentu.
+     * stay_types kosong/null = HANYA harian (default lama). Set = harus cocok.
+     */
+    public function appliesToStayType(string $stayType): bool
     {
+        $types = is_array($this->stay_types) ? array_filter($this->stay_types) : [];
+        if (empty($types)) {
+            return $stayType === 'daily';
+        }
+        return in_array($stayType, $types, true);
+    }
+
+    public function conditionError(?Hotel $hotel, ?string $checkIn, string $productType = 'accommodation', string $stayType = 'daily'): ?string
+    {
+        // 0b. Tipe menginap (harian/mingguan/bulanan).
+        if ($productType === 'accommodation' && !$this->appliesToStayType($stayType)) {
+            $labels = ['daily' => 'Harian', 'weekly' => 'Mingguan', 'monthly' => 'Bulanan'];
+            $allowed = is_array($this->stay_types) ? array_filter($this->stay_types) : ['daily'];
+            $names = array_map(fn ($s) => $labels[$s] ?? $s, $allowed);
+            return 'Promo ini hanya berlaku untuk menginap: ' . implode(', ', $names) . '.';
+        }
+
         // 0. Berlaku untuk produk apa (accommodation/pesawat/pelni/kereta).
         $products = is_array($this->product_types) ? array_filter($this->product_types) : [];
         if (!empty($products) && !in_array($productType, $products, true)) {

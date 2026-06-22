@@ -268,8 +268,12 @@ class TravelService
             'token'         => $token,
         ];
 
+        // Search mem-pool SEMUA maskapai paralel. Pakai timeout PENDEK khusus search:
+        // 1 maskapai yang hang TIDAK boleh men-stall seluruh pencarian sampai 45 dtk
+        // (bikin FE/proxy timeout → "Gagal mencari penerbangan"). Yang lambat di-drop saja.
+        $searchTimeout = max(8, min($this->timeout, 18));
         $responses = Http::pool(fn ($pool) => array_map(
-            fn ($a) => $pool->as($a)->timeout($this->timeout)->acceptJson()->asJson()
+            fn ($a) => $pool->as($a)->connectTimeout(8)->timeout($searchTimeout)->acceptJson()->asJson()
                 ->post($baseUrl . '/flight/search', $payload + ['airline' => $a]),
             self::AIRLINES
         ));

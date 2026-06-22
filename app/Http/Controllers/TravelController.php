@@ -268,15 +268,33 @@ class TravelController extends Controller
             'infant'         => 'nullable|integer|min:0|max:4',
         ]);
 
-        $res = $this->travel->searchAllFlights([
-            'departure'     => strtoupper($v['departure']),
-            'arrival'       => strtoupper($v['arrival']),
-            'departureDate' => $v['departure_date'],
-            'returnDate'    => $v['return_date'] ?? '',
-            'adult'         => $v['adult'],
-            'child'         => $v['child'] ?? 0,
-            'infant'        => $v['infant'] ?? 0,
-        ]);
+        try {
+            $res = $this->travel->searchAllFlights([
+                'departure'     => strtoupper($v['departure']),
+                'arrival'       => strtoupper($v['arrival']),
+                'departureDate' => $v['departure_date'],
+                'returnDate'    => $v['return_date'] ?? '',
+                'adult'         => $v['adult'],
+                'child'         => $v['child'] ?? 0,
+                'infant'        => $v['infant'] ?? 0,
+            ]);
+        } catch (\Throwable $e) {
+            logger()->warning('Flight search-all gagal', [
+                'route' => $v['departure'] . '-' . $v['arrival'], 'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Layanan maskapai sedang gangguan. Silakan coba lagi beberapa saat.',
+            ], 503);
+        }
+
+        // Token/auth vendor gagal → bedakan dari "tidak ada penerbangan" (data kosong).
+        if (($res['rc'] ?? null) === 'CONFIG') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Layanan maskapai sedang tidak tersedia (autentikasi vendor). Coba lagi nanti.',
+            ], 503);
+        }
 
         return response()->json(['success' => true, 'data' => $res['flights'] ?? []]);
     }

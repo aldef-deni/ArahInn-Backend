@@ -91,10 +91,11 @@ class PromoController extends Controller
     public function validate(Request $request)
     {
         $data = $request->validate([
-            'code'     => 'required|string',
-            'amount'   => 'required|numeric',
-            'hotel_id' => 'nullable|integer',
-            'check_in' => 'nullable|date',
+            'code'      => 'required|string',
+            'amount'    => 'required|numeric',
+            'hotel_id'  => 'nullable|integer',
+            'check_in'  => 'nullable|date',
+            'stay_type' => 'nullable|string|in:daily,weekly,monthly',
         ]);
 
         $promo = Promo::where('code', $data['code'])->active()->first();
@@ -115,8 +116,8 @@ class PromoController extends Controller
             return response()->json(['success' => false, 'message' => 'Kode promo hanya berlaku untuk properti tertentu.'], 400);
         }
 
-        // Kondisi opsional (weekday/weekend, jenis akomodasi, lokasi)
-        if ($err = $promo->conditionError($hotel, $data['check_in'] ?? null)) {
+        // Kondisi opsional (weekday/weekend, jenis akomodasi, lokasi, tipe menginap)
+        if ($err = $promo->conditionError($hotel, $data['check_in'] ?? null, 'accommodation', $data['stay_type'] ?? 'daily')) {
             return response()->json(['success' => false, 'message' => $err], 400);
         }
 
@@ -241,6 +242,8 @@ class PromoController extends Controller
             'location'        => 'nullable|string|max:255',
             'product_types'   => 'nullable|array',
             'product_types.*' => 'in:accommodation,pesawat,pelni,kereta',
+            'stay_types'      => 'nullable|array',                 // [] / null = harian saja
+            'stay_types.*'    => 'in:daily,weekly,monthly',
             'hotel_id'        => 'nullable|integer|exists:hotels,id', // null = semua properti
         ], [
             'image.max'        => 'Ukuran gambar maksimal 5 MB.',
@@ -298,7 +301,7 @@ class PromoController extends Controller
 
         $allowed = ['name', 'description', 'discount_type', 'discount_value', 'min_purchase',
                     'max_discount', 'quota', 'start_date', 'end_date', 'is_active',
-                    'day_type', 'hotel_types', 'location', 'product_types'];
+                    'day_type', 'hotel_types', 'location', 'product_types', 'stay_types'];
 
         if ($user->hasAnyRole(['admin', 'superadmin'])) {
             $allowed[] = 'owner_id';
@@ -311,6 +314,7 @@ class PromoController extends Controller
         if (array_key_exists('location', $updates) && !$updates['location']) $updates['location'] = null;
         if (array_key_exists('hotel_types', $updates) && empty($updates['hotel_types'])) $updates['hotel_types'] = null;
         if (array_key_exists('product_types', $updates) && empty($updates['product_types'])) $updates['product_types'] = null;
+        if (array_key_exists('stay_types', $updates) && empty($updates['stay_types'])) $updates['stay_types'] = null;
 
         // Upload image flyer kalau ada file baru (bypass Flysystem)
         if ($request->hasFile('image')) {

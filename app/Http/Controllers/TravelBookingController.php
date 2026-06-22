@@ -620,39 +620,77 @@ class TravelBookingController extends Controller
 
         // Pulang-pergi: terbitkan SEMUA leg dalam group sekaligus (1 klik → 2 e-tiket).
         if ($booking->group_code) {
-            $legs = TravelBooking::where('group_code', $booking->group_code)->orderBy('leg')->get();
+            $legs = TravelBooking::with('user:id,name,email')
+                ->where('group_code', $booking->group_code)->orderBy('leg')->get();
+
+            // ── PRA-CEK (cegah penerbitan SETENGAH JADI / partial) ────────────
+            // Tiket yang sudah terbit TIDAK bisa di-un-issue. Maka sebelum bayar
+            // leg mana pun, pastikan SEMUA leg yang belum terbit memang layak
+            // (status pending_payment/paid + hold vendor belum kedaluwarsa).
+            // Kalau ada yang tak layak DAN belum ada leg yang terbit → batalkan
+            // total: tidak ada leg yang dibayar/diterbitkan → tidak ada tiket separuh.
+            $anyIssued = $legs->contains(fn ($l) => $l->status === 'issued');
+            $blocked = [];
+            foreach ($legs as $leg) {
+                if ($leg->status === 'issued') continue;
+                if (!in_array($leg->status, ['pending_payment', 'paid'], true)) {
+                    $blocked[] = ['code' => $leg->code, 'leg' => $leg->leg, 'reason' => 'status ' . $leg->status . ' tidak bisa diterbitkan'];
+                } elseif (!$simulate && $this->holdExpired($leg)) {
+                    $blocked[] = ['code' => $leg->code, 'leg' => $leg->leg, 'reason' => 'batas waktu hold vendor sudah lewat'];
+                }
+            }
+            if ($blocked && !$anyIssued) {
+                return response()->json([
+                    'success' => false,
+                    'blocked' => $blocked,
+                    'message' => 'Penerbitan dibatalkan — ada leg yang tidak bisa diterbitkan (hold kedaluwarsa / status tidak valid). TIDAK ada leg yang diterbitkan (tidak ada tiket separuh). Silakan rebook penerbangan atau proses refund.',
+                ], 422);
+            }
+
+            // ── TERBITKAN tiap leg yang belum terbit ──────────────────────────
             $results = [];
-            $anyFail = false;
             foreach ($legs as $leg) {
                 if ($leg->status === 'issued') {
                     $results[] = ['code' => $leg->code, 'leg' => $leg->leg, 'ok' => true, 'message' => 'sudah terbit'];
                     continue;
                 }
-                if (!in_array($leg->status, ['pending_payment', 'paid'])) {
-                    $results[] = ['code' => $leg->code, 'leg' => $leg->leg, 'ok' => false, 'message' => 'status tidak bisa diterbitkan'];
-                    $anyFail = true;
+                if (!in_array($leg->status, ['pending_payment', 'paid'], true)
+                    || (!$simulate && $this->holdExpired($leg))) {
+                    $results[] = ['code' => $leg->code, 'leg' => $leg->leg, 'ok' => false, 'message' => 'tidak layak diterbitkan'];
                     continue;
                 }
-                // Email ditahan per-leg → dikirim sekali (gabungan) setelah semua leg terbit.
+                // Email ditahan → dikelola setelah loop sesuai hasil (gabungan / partial).
                 $r = $this->issueBooking($leg, $simulate, sendEmail: false);
                 $results[] = ['code' => $leg->code, 'leg' => $leg->leg, 'ok' => $r['ok'], 'message' => $r['message']];
-                if (!$r['ok']) $anyFail = true;
             }
 
-            $fresh = TravelBooking::where('group_code', $booking->group_code)->orderBy('leg')->get();
-            // Kirim 1 email berisi 2 e-tiket dalam 1 PDF (hanya jika SEMUA leg terbit).
-            if (!$anyFail && $fresh->every(fn ($l) => $l->status === 'issued')) {
-                $this->sendGroupEtiketEmail($fresh);
+            $fresh = TravelBooking::with('user:id,name,email')
+                ->where('group_code', $booking->group_code)->orderBy('leg')->get();
+            $issuedAll = $fresh->every(fn ($l) => $l->status === 'issued');
+            $issuedAny = $fresh->contains(fn ($l) => $l->status === 'issued');
+
+            // ── EMAIL ─────────────────────────────────────────────────────────
+            if ($issuedAll) {
+                $this->sendGroupEtiketEmail($fresh);                 // 1 email gabungan (2 e-tiket dalam 1 PDF)
+            } elseif ($issuedAny) {
+                // PARTIAL (mis. saldo vendor habis di leg ke-2): JANGAN tahan total.
+                // Kirim e-tiket leg yang BERHASIL terbit supaya customer tetap dapat tiketnya.
+                foreach ($fresh->where('status', 'issued') as $leg) {
+                    $this->sendEtiketEmail($leg, $leg->user);
+                }
             }
 
             return response()->json([
-                'success' => !$anyFail,
+                'success' => $issuedAll,
+                'partial' => $issuedAny && !$issuedAll,
                 'data'    => $fresh,
                 'results' => $results,
-                'message' => $anyFail
-                    ? 'Sebagian leg gagal diterbitkan — cek detail per leg.'
-                    : 'E-tiket pulang-pergi (2 leg) berhasil diterbitkan — 1 email berisi 2 e-tiket telah dikirim.',
-            ], $anyFail ? 422 : 200);
+                'message' => $issuedAll
+                    ? 'E-tiket pulang-pergi (2 leg) berhasil diterbitkan — 1 email berisi 2 e-tiket telah dikirim.'
+                    : ($issuedAny
+                        ? '⚠️ PARTIAL: sebagian leg terbit, sebagian gagal (cek saldo Rajabiller / status per leg). E-tiket leg yang berhasil SUDAH dikirim ke customer. Segera tindak lanjuti leg yang gagal — retry penerbitan atau refund bagian itu.'
+                        : 'Semua leg gagal diterbitkan — tidak ada tiket terbit. Cek saldo Rajabiller / status, lalu retry atau refund.'),
+            ], $issuedAll ? 200 : 422);
         }
 
         // One-way
@@ -709,6 +747,20 @@ class TravelBookingController extends Controller
             'data'    => $booking->fresh(),
             'message' => 'Pesanan travel dibatalkan.',
         ]);
+    }
+
+    /**
+     * Hold vendor sudah kedaluwarsa? Defensif: hanya percaya kalau time_limit
+     * ter-parse jadi tanggal yang masuk akal (cegah salah-parse jadi epoch/far-future
+     * yang bisa salah-blok). Kalau ragu → false (biarkan vendor yang menolak).
+     */
+    private function holdExpired(TravelBooking $leg): bool
+    {
+        $tl = $leg->time_limit;   // Carbon|null (cast datetime di model)
+        if (!$tl) return false;
+        $year = (int) $tl->format('Y');
+        if ($year < 2024 || $year > ((int) now()->format('Y')) + 2) return false;
+        return $tl->isPast();
     }
 
     /** Eksekusi issue ke Rajabiller + update booking + kirim e-tiket email. */

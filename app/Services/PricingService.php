@@ -130,14 +130,13 @@ class PricingService
         //    dihitung dari base price, bukan subtotal).
         $hotelOwnerId = $room->hotel->owner_id ?? null;
 
-        // Long-stay (mingguan/bulanan) DIKECUALIKAN dari semua promo & campaign.
         $campaignDiscount = 0;
         $campaign = null;
         $codeDiscount = 0;
         $promo = null;
         if (!$isLongStay) {
             // 2a. Diskon CAMPAIGN otomatis (owner mengikuti campaign / promo platform) —
-            //     SELALU dihitung, tidak hilang walau ada kode promo manual.
+            //     SELALU dihitung, tidak hilang walau ada kode promo manual. HANYA harian.
             if ($hotelOwnerId) {
                 $best = \App\Services\OwnerDiscountService::best($hotelOwnerId, $basePrice);
                 if ($best) {
@@ -146,7 +145,10 @@ class PricingService
                 }
             }
             // 2b. Diskon KODE PROMO manual (kalau ada) — DI-STACK di atas diskon campaign.
-            [$codeDiscount, $promo] = $this->applyPromo($promoCode, $basePrice, $hotelOwnerId, $room->hotel, $checkIn);
+            [$codeDiscount, $promo] = $this->applyPromo($promoCode, $basePrice, $hotelOwnerId, $room->hotel, $checkIn, $stayType);
+        } else {
+            // Long-stay: tanpa campaign auto, tapi promo KODE yang di-scope mingguan/bulanan TETAP berlaku.
+            [$codeDiscount, $promo] = $this->applyPromo($promoCode, $basePrice, $hotelOwnerId, $room->hotel, $checkIn, $stayType);
         }
 
         // Total diskon = campaign + kode, dibatasi agar tidak melebihi harga.
@@ -182,9 +184,16 @@ class PricingService
         $discountOwner   = round(($promoIsOwner ? $codeDiscount : 0) * $discScale, 2);
         $discountArahinn = round(($campaignDiscount + ($promoIsOwner ? 0 : $codeDiscount)) * $discScale, 2);
 
-        // Basis komisi = harga − diskon ArahInn (diskon owner TIDAK mengurangi basis).
-        $commissionBase   = max(0, $originalBasePrice - $discountArahinn);
-        $ownerPayout      = round($commissionBase * (1 - $commissionRate), 2);
+        if ($isLongStay) {
+            // Long-stay: tanpa komisi. PEMBUAT promo yang menanggung →
+            //   promo OWNER → owner terima (harga paket − promo owner)
+            //   promo ARAHINN → owner terima penuh (ArahInn yang menanggung)
+            $ownerPayout = round(max(0, $originalBasePrice - $discountOwner), 2);
+        } else {
+            // Harian: basis komisi = harga − diskon ArahInn (diskon owner TIDAK mengurangi basis).
+            $commissionBase = max(0, $originalBasePrice - $discountArahinn);
+            $ownerPayout    = round($commissionBase * (1 - $commissionRate), 2);
+        }
         // Laba ArahInn = yang dibayar customer untuk kamar (post-promo) − setoran owner + biaya layanan.
         $commissionProfit = round($basePrice - $ownerPayout + $serviceFee, 2);
 
@@ -307,7 +316,7 @@ class PricingService
     /**
      * Validasi dan hitung diskon promo
      */
-    private function applyPromo(?string $code, float $amount, ?int $hotelOwnerId = null, $hotel = null, ?string $checkIn = null): array
+    private function applyPromo(?string $code, float $amount, ?int $hotelOwnerId = null, $hotel = null, ?string $checkIn = null, string $stayType = 'daily'): array
     {
         if (!$code) return [0, null];
 
@@ -327,8 +336,8 @@ class PricingService
             throw new \InvalidArgumentException('Kode promo hanya berlaku untuk properti tertentu.');
         }
 
-        // Kondisi opsional (weekday/weekend, jenis akomodasi, lokasi)
-        if ($err = $promo->conditionError($hotel, $checkIn)) {
+        // Kondisi opsional (weekday/weekend, jenis akomodasi, lokasi, tipe menginap)
+        if ($err = $promo->conditionError($hotel, $checkIn, 'accommodation', $stayType)) {
             throw new \InvalidArgumentException($err);
         }
 
