@@ -664,6 +664,7 @@ class TravelService
                 'path'        => $path,
                 'http_status' => $response->status(),
                 'rc'          => $data['rc'] ?? null,
+                'rd'          => $data['rd'] ?? null,   // pesan detail vendor (ringkas — untuk diagnosa, tanpa payload/token)
                 'duration_ms' => $duration,
             ]);
 
