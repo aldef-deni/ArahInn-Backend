@@ -62,13 +62,19 @@
   <div class="section-title">Detail Perjalanan</div>
   <table class="info-grid">
     <tr>
-      <td><div class="k">{{ $serviceLabel }}</div><div class="v">{{ $b->service_name ?: '—' }}</div></td>
+      <td><div class="k">{{ $serviceLabel }}</div><div class="v">{{ !empty($airlineName) ? $airlineName . ' · ' . ($b->service_name ?: '') : ($b->service_name ?: '—') }}</div></td>
       <td><div class="k">Kelas</div><div class="v">{{ $b->class ?: '—' }}</div></td>
     </tr>
     <tr>
       <td><div class="k">Tanggal Berangkat</div><div class="v">{{ $departDate }}</div></td>
       <td><div class="k">Jumlah Penumpang</div><div class="v">{{ $b->pax }} orang</div></td>
     </tr>
+    @if($b->moda === 'pelni')
+    <tr>
+      <td><div class="k">Total Harga</div><div class="v" style="color:{{ $accent }}; font-weight:bold;">Rp {{ $totalPrice }}</div></td>
+      <td></td>
+    </tr>
+    @endif
   </table>
 </div>
 

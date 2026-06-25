@@ -315,6 +315,92 @@ class SettingController extends Controller
     }
 
     /* ──────────────────────────────────────────────────────────────────────
+     * Biaya Penanganan Tiket — per moda (pesawat / pelni / kereta), masing-masing
+     * beda. Nominal (Rp) dihitung PER PENUMPANG, atau persentase dari harga tiket.
+     * Persen > 0 → pakai persen; selain itu nominal. Jika 0 → tidak ditampilkan.
+     * ───────────────────────────────────────────────────────────────────── */
+
+    /** Moda yang punya biaya penanganan. */
+    public const TRAVEL_FEE_MODAS = ['pesawat', 'pelni', 'kereta'];
+
+    public function getTravelServiceFee()
+    {
+        return response()->json(['success' => true, 'data' => self::travelServiceFee()]);
+    }
+
+    public function setTravelServiceFee(Request $request)
+    {
+        $rules = [];
+        foreach (self::TRAVEL_FEE_MODAS as $m) {
+            $rules["$m.amount"]  = 'nullable|integer|min:0|max:100000000';
+            $rules["$m.percent"] = 'nullable|numeric|min:0|max:100';
+        }
+        // Biaya admin (nominal flat) — khusus PELNI.
+        $rules['pelni.admin_amount'] = 'nullable|integer|min:0|max:100000000';
+        $data = $request->validate($rules);
+
+        $settings = [
+            'updated_by' => $request->user()->id,
+            'updated_at' => now()->toIso8601String(),
+        ];
+        foreach (self::TRAVEL_FEE_MODAS as $m) {
+            $settings[$m] = [
+                'amount'  => (int) ($data[$m]['amount'] ?? 0),
+                'percent' => isset($data[$m]['percent']) ? round((float) $data[$m]['percent'], 2) : 0,
+            ];
+        }
+        $settings['pelni']['admin_amount'] = (int) ($data['pelni']['admin_amount'] ?? 0);
+        self::writeSetting('travel_service_fee', $settings);
+
+        return response()->json([
+            'success' => true,
+            'data'    => $settings,
+            'message' => 'Biaya penanganan tiket diperbarui.',
+        ]);
+    }
+
+    /** Konfigurasi biaya penanganan per moda. Default semua 0 (tidak ditampilkan). */
+    public static function travelServiceFee(): array
+    {
+        $o = self::readSetting('travel_service_fee') ?? [];
+        $out = [];
+        foreach (self::TRAVEL_FEE_MODAS as $m) {
+            $out[$m] = [
+                'amount'  => (int) ($o[$m]['amount'] ?? 0),
+                'percent' => (float) ($o[$m]['percent'] ?? 0),
+            ];
+        }
+        // Biaya admin nominal — khusus PELNI.
+        $out['pelni']['admin_amount'] = (int) ($o['pelni']['admin_amount'] ?? 0);
+        $out['updated_at'] = $o['updated_at'] ?? null;
+        return $out;
+    }
+
+    /** Biaya admin nominal flat per order (khusus PELNI). 0 = tidak ditampilkan. */
+    public static function travelAdminFee(string $moda): int
+    {
+        $cfg = self::travelServiceFee();
+        return (int) ($cfg[$moda]['admin_amount'] ?? 0);
+    }
+
+    /**
+     * Total biaya penanganan untuk 1 order.
+     * @param string $moda        pesawat|pelni|kereta
+     * @param int    $vendorPrice total harga tiket vendor (sudah × jumlah pax)
+     * @param int    $pax         jumlah penumpang berbayar
+     * Persen > 0 → persen × harga tiket; selain itu nominal × pax. 0 → tak tampil.
+     */
+    public static function computeTravelFee(string $moda, int $vendorPrice, int $pax): int
+    {
+        $cfg = self::travelServiceFee();
+        $f   = $cfg[$moda] ?? ['amount' => 0, 'percent' => 0];
+        if (($f['percent'] ?? 0) > 0) {
+            return (int) round((float) $f['percent'] / 100 * $vendorPrice);
+        }
+        return (int) ($f['amount'] ?? 0) * max(1, $pax);
+    }
+
+    /* ──────────────────────────────────────────────────────────────────────
      * Nomor WhatsApp konsultasi Design Interior — bisa diubah admin.
      * Dipakai tombol "Mulai Konsultasi" di halaman /interior.
      * ───────────────────────────────────────────────────────────────────── */

@@ -503,6 +503,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/settings/accommodation-service-fee', [SettingController::class, 'setAccommodationServiceFee'])
             ->middleware('role:superadmin');
 
+        // Biaya penanganan tiket per moda (superadmin only)
+        Route::get('/settings/travel-service-fee',  [SettingController::class, 'getTravelServiceFee'])
+            ->middleware('role:superadmin');
+        Route::post('/settings/travel-service-fee', [SettingController::class, 'setTravelServiceFee'])
+            ->middleware('role:superadmin');
+
         // Nomor WA konsultasi Design Interior (superadmin/admin/design_interior)
         Route::get('/settings/interior-wa',  [SettingController::class, 'getInteriorWa'])
             ->middleware('role:superadmin|admin|design_interior');

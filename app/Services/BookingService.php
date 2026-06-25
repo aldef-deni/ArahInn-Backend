@@ -272,8 +272,17 @@ class BookingService
         $booking->update(['status' => 'issued', 'issued_at' => now()]);
         $this->lock->unlock($booking->room_id);
 
-        // Tambah loyalty points sesuai skema tier (Rp earn_per per poin × multiplier)
-        $this->loyalty->earnForBooking($booking);
+        // Tambah loyalty points sesuai skema tier (Rp earn_per per poin × multiplier).
+        // WAJIB try-catch: kegagalan loyalty (mis. kolom belum migrate) TIDAK BOLEH
+        // menghentikan pengiriman e-voucher ke tamu & owner (loyalty bersifat non-kritis).
+        try {
+            $this->loyalty->earnForBooking($booking);
+        } catch (\Throwable $e) {
+            logger()->error('BookingIssued: loyalty earn failed (diabaikan)', [
+                'booking_code' => $booking->booking_code,
+                'error'        => $e->getMessage(),
+            ]);
+        }
 
         // Refresh model + relations untuk pastikan data lengkap saat render PDF
         $booking = $booking->fresh(['hotel', 'room']) ?? $booking;

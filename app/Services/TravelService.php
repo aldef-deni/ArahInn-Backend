@@ -245,6 +245,37 @@ class TravelService
     ];
 
     /**
+     * Peta prefix kode penerbangan (IATA) → maskapai sebenarnya.
+     * Vendor mengelompokkan per group (mis. query Lion/TPJT mengembalikan
+     * Lion JT + Batik ID + Wings IW), jadi nama maskapai HARUS diambil dari
+     * prefix flightCode asli ("ID-7512" → Batik), bukan dari kode query group.
+     */
+    public const CARRIER_MAP = [
+        'GA' => ['code' => 'TPGA', 'name' => 'Garuda Indonesia'],
+        'QG' => ['code' => 'TPQG', 'name' => 'Citilink'],
+        'JT' => ['code' => 'TPJT', 'name' => 'Lion Air'],
+        'IW' => ['code' => 'TPIW', 'name' => 'Wings Air'],
+        'ID' => ['code' => 'TPID', 'name' => 'Batik Air'],
+        'SJ' => ['code' => 'TPSJ', 'name' => 'Sriwijaya Air'],
+        'IN' => ['code' => 'TPIN', 'name' => 'NAM Air'],
+        'QZ' => ['code' => 'TPQZ', 'name' => 'Indonesia AirAsia'],
+    ];
+
+    /**
+     * Tentukan maskapai sebenarnya dari kode penerbangan (mis. "ID-7512" → Batik Air).
+     * Fallback ke kode query group bila prefix tak dikenal.
+     */
+    public static function resolveCarrier($flightCode, string $queryCode): array
+    {
+        $letters = preg_replace('/[^A-Za-z]/', '', (string) $flightCode);
+        $prefix  = strtoupper(substr($letters, 0, 2));
+        if (isset(self::CARRIER_MAP[$prefix])) {
+            return self::CARRIER_MAP[$prefix];
+        }
+        return ['code' => $queryCode, 'name' => self::AIRLINE_NAMES[$queryCode] ?? $queryCode];
+    }
+
+    /**
      * Cari penerbangan dari SEMUA maskapai sekaligus (paralel via Http::pool).
      * @param array $p { departure, arrival, departureDate, returnDate?, adult, child, infant }
      * @return array { rc, flights: [ ...flight + airline + airlineName ] }
@@ -287,8 +318,15 @@ class TravelService
             } catch (\Throwable $e) { continue; }
             if (!is_array($data)) continue;
             foreach ($data as $fl) {
-                $fl['airline']     = $a;
-                $fl['airlineName'] = self::AIRLINE_NAMES[$a] ?? $a;
+                // Nama maskapai dari prefix flightCode asli (mis. "ID-xxx" → Batik),
+                // BUKAN dari kode query group ($a) yang bisa salah (Lion group).
+                $first      = $fl['classes'][0][0] ?? [];
+                $flightCode = $first['flightCode'] ?? $first['flight_code'] ?? $first['flightCode1'] ?? '';
+                $carrier    = self::resolveCarrier($flightCode, $a);
+
+                $fl['airline']     = $a;                // kode query group → utk booking ke vendor (jangan diubah)
+                $fl['airlineCode'] = $carrier['code']; // kode maskapai asli → utk logo & filter
+                $fl['airlineName'] = $carrier['name']; // nama maskapai asli → tampil ke user
                 $flights[] = $fl;
             }
         }

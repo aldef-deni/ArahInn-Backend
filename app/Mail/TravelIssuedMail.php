@@ -122,6 +122,10 @@ class TravelIssuedMail extends Mailable
             'arriveTime'      => $fmtTime($b->arrive_time),
             'departDate'      => $b->depart_date ? $b->depart_date->translatedFormat('D, d M Y') : '—',
             'totalPrice'      => number_format($b->total_price, 0, ',', '.'),
+            // Nama maskapai dari kode penerbangan asli (mis. QG179 → Citilink). Hanya pesawat.
+            'airlineName'     => $b->moda === 'pesawat'
+                ? (\App\Services\TravelService::resolveCarrier($b->service_name, $b->airline ?? '')['name'] ?? '')
+                : '',
             'pax'             => $flat,
             // Catatan penting per maskapai (bagasi + syarat) — hanya untuk moda pesawat, bilingual
             'flightNotes'     => $b->moda === 'pesawat' ? \App\Support\AirlineNotes::for($b->airline, 'id') : [],
@@ -163,18 +167,22 @@ class TravelIssuedMail extends Mailable
         $pax0  = ($first->passengers['adults'][0] ?? null) ?? ($first->passengers[0] ?? []);
         $name  = $pax0['name'] ?? trim(($pax0['firstName'] ?? $pax0['first_name'] ?? '') . ' ' . ($pax0['lastName'] ?? $pax0['last_name'] ?? ''));
 
-        // Baris produk per leg
+        // Baris produk per leg — tampil HARGA TIKET (tanpa biaya layanan; biaya layanan baris terpisah).
         $items = $list->map(fn (TravelBooking $b) => [
             'product' => 'Tiket Pesawat',
             'desc'    => ($b->service_name ?: $b->airline) . ' (' . $b->origin . ' – ' . $b->destination . ')',
             'sub'     => $b->pax . ' Penumpang' . ($b->vendor_booking_code ? ' · PNR ' . $b->vendor_booking_code : ''),
-            'amount'  => 'Rp ' . number_format((int) $b->total_price, 0, ',', '.'),
+            'amount'  => 'Rp ' . number_format((int) $b->vendor_price, 0, ',', '.'),
         ])->all();
 
-        $subtotal   = (int) $list->sum('total_price');
-        $discount   = (int) $list->sum('promo_discount');
-        $grandTotal = max(0, $subtotal - $discount);
-        $paidAt     = $first->paid_at ?? $first->issued_at;
+        $ticketSubtotal = (int) $list->sum('vendor_price');
+        $discount       = (int) $list->sum('promo_discount');
+        $grandTotal     = (int) $list->sum('total_price');   // sudah termasuk biaya penanganan + admin − diskon
+        $adminFee       = (int) $list->sum('admin_fee');     // biaya admin (khusus pelni)
+        // Biaya penanganan diturunkan dari selisih (kurangi admin) → benar utk booking lama & baru.
+        $serviceFee     = max(0, $grandTotal - $ticketSubtotal + $discount - $adminFee);
+        $subtotal       = $ticketSubtotal;
+        $paidAt         = $first->paid_at ?? $first->issued_at;
 
         return [
             'orderId'      => $first->group_code ?: $first->code,
@@ -186,6 +194,8 @@ class TravelIssuedMail extends Mailable
             'method'       => self::paymentLabel($first->payment_method),
             'items'        => $items,
             'subtotal'     => 'Rp ' . number_format($subtotal, 0, ',', '.'),
+            'serviceFee'   => $serviceFee > 0 ? 'Rp ' . number_format($serviceFee, 0, ',', '.') : null,
+            'adminFee'     => $adminFee > 0 ? 'Rp ' . number_format($adminFee, 0, ',', '.') : null,
             'discount'     => $discount > 0 ? 'Rp ' . number_format($discount, 0, ',', '.') : null,
             'grandTotal'   => 'Rp ' . number_format($grandTotal, 0, ',', '.'),
             'showTaxNote'  => false,   // tiket travel: harga total sudah final, tanpa PPN terpisah

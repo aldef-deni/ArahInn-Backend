@@ -49,7 +49,14 @@ return Application::configure(basePath: dirname(__DIR__))
                     return response()->json(['success' => false, 'message' => 'Tidak terautentikasi.'], 401);
                 }
                 if ($e instanceof \Illuminate\Validation\ValidationException) {
-                    return response()->json(['success' => false, 'errors' => $e->errors(), 'message' => 'Data tidak valid.'], 422);
+                    // Tampilkan pesan error spesifik (field pertama) agar user tahu apa yang salah,
+                    // bukan sekadar "Data tidak valid." yang generik.
+                    $firstError = collect($e->errors())->flatten()->first();
+                    return response()->json([
+                        'success' => false,
+                        'errors'  => $e->errors(),
+                        'message' => $firstError ?: 'Data tidak valid.',
+                    ], 422);
                 }
                 if ($e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException) {
                     return response()->json(['success' => false, 'message' => 'Data tidak ditemukan.'], 404);

@@ -246,6 +246,7 @@ class BookingController extends Controller
             return response()->json(['success' => false, 'message' => 'Booking belum dibayar, voucher belum bisa dikirim.'], 400);
         }
 
+        // 1. Kirim ke email TAMU (customer) — wajib; gagal di sini = request gagal
         try {
             \Illuminate\Support\Facades\Mail::to($booking->guest_email)
                 ->send(new \App\Mail\BookingIssuedMail($booking));
@@ -261,12 +262,35 @@ class BookingController extends Controller
             ], 500);
         }
 
+        // 2. Kirim juga ke email OWNER properti — best-effort (gagal tidak membatalkan)
+        $ownerEmail = \App\Models\User::find($booking->hotel?->owner_id)?->email;
+        if ($ownerEmail) {
+            try {
+                \Illuminate\Support\Facades\Mail::to($ownerEmail)
+                    ->send(new \App\Mail\BookingIssuedMail($booking));
+            } catch (\Throwable $e) {
+                logger()->error('ResendVoucher to owner failed', [
+                    'booking_code' => $booking->booking_code,
+                    'owner_email'  => $ownerEmail,
+                    'error'        => $e->getMessage(),
+                ]);
+            }
+        } else {
+            logger()->warning('ResendVoucher: owner email missing', [
+                'booking_code' => $booking->booking_code,
+                'hotel_id'     => $booking->hotel?->id,
+                'owner_id'     => $booking->hotel?->owner_id,
+            ]);
+        }
+
         // Berhasil → bersihkan penanda gagal
         $booking->update(['voucher_sent_at' => now(), 'voucher_error' => null]);
 
+        $recipients = $booking->guest_email . ($ownerEmail ? " & {$ownerEmail}" : '');
+
         return response()->json([
             'success' => true,
-            'message' => "Voucher telah dikirim ulang ke {$booking->guest_email}.",
+            'message' => "Voucher telah dikirim ulang ke {$recipients}.",
         ]);
     }
 

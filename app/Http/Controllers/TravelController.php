@@ -20,12 +20,15 @@ class TravelController extends Controller
 
     /* ── PUBLIC: read-only ──────────────────────────────────────────── */
 
-    /** Setting travel publik (markup per pax) untuk ditampilkan di harga. */
+    /** Setting travel publik (biaya penanganan per moda) untuk ditampilkan di harga. */
     public function settings()
     {
         return response()->json([
             'success' => true,
             'data'    => [
+                // Biaya penanganan per moda: { pesawat:{amount,percent}, pelni:{...}, kereta:{...} }
+                'service_fees'   => \App\Http\Controllers\Admin\SettingController::travelServiceFee(),
+                // Backward-compat (lama) — tidak dipakai lagi oleh FE baru.
                 'markup_per_pax' => \App\Http\Controllers\Admin\SettingController::travelMarkup()['amount'],
             ],
         ]);

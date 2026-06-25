@@ -62,11 +62,10 @@ class TravelBookingController extends Controller
 
         $adult  = (int) $v['adult'];
         $infant = (int) ($v['infant'] ?? 0);
-        $markup = (int) ($v['markup'] ?? SettingController::travelMarkup()['amount']);
-
         // Hitung total + validasi promo SEBELUM booking vendor (hindari booking sia-sia)
         $vendorPrice = (int) round(((float) $v['price_adult']) * $adult);
-        $total       = $vendorPrice + $markup * $adult;
+        $markup      = SettingController::computeTravelFee('kereta', $vendorPrice, $adult); // total biaya penanganan (0 = tak tampil)
+        $total       = $vendorPrice + $markup;
         [$promo, $promoDiscount] = $this->resolveTravelPromo($request->input('promo_code'), 'kereta', (float) $total, $v['date']);
 
         $res = $this->travel->bookTrain([
@@ -137,8 +136,14 @@ class TravelBookingController extends Controller
     private function checkoutPesawat(Request $request)
     {
         // Pulang-pergi: 2 leg (pergi + pulang) → 1 order (group) → 1 pembayaran → 2 e-tiket.
+        // ⚠️ Modul PP DIMATIKAN sementara (belum stabil di vendor). Hapus blok ini untuk
+        // mengaktifkan kembali (method checkoutPesawatRoundTrip tetap ada di bawah).
         if ($request->input('trip_type') === 'roundtrip') {
-            return $this->checkoutPesawatRoundTrip($request);
+            return response()->json([
+                'success' => false,
+                'message' => 'Pemesanan tiket pulang-pergi sementara belum tersedia. Silakan pesan tiket sekali jalan (one-way) untuk keberangkatan dan kepulangan secara terpisah.',
+            ], 422);
+            // return $this->checkoutPesawatRoundTrip($request);
         }
 
         $v = $request->validate([
@@ -164,11 +169,10 @@ class TravelBookingController extends Controller
 
         $adult = (int) $v['adult']; $child = (int) ($v['child'] ?? 0); $infant = (int) ($v['infant'] ?? 0);
         $payingPax = $adult + $child;
-        $markup = (int) ($v['markup'] ?? SettingController::travelMarkup()['amount']);
-
         // Hitung total + validasi promo SEBELUM booking vendor
         $vendorPrice = (int) round(((float) $v['price']) * $payingPax);
-        $total       = $vendorPrice + $markup * $payingPax;
+        $markup      = SettingController::computeTravelFee('pesawat', $vendorPrice, $payingPax); // total biaya penanganan (0 = tak tampil)
+        $total       = $vendorPrice + $markup;
         [$promo, $promoDiscount] = $this->resolveTravelPromo($request->input('promo_code'), 'pesawat', (float) $total, $v['departure_date']);
 
         // WNI → idNumber = NIK; WNA → idNumber jatuh ke nomor paspor (identitas yang dipakai vendor)
@@ -419,11 +423,11 @@ class TravelBookingController extends Controller
         $adult = (int) $v['adult']; $child = (int) ($v['child'] ?? 0); $infant = (int) ($v['infant'] ?? 0);
         $male = (int) ($v['male'] ?? 0); $female = (int) ($v['female'] ?? 0);
         $payingPax = $adult + $child;
-        $markup = (int) ($v['markup'] ?? SettingController::travelMarkup()['amount']);
-
         // Hitung total + validasi promo SEBELUM booking vendor
         $vendorPrice = (int) round(((float) $v['harga_dewasa']) * $adult + ((float) ($v['harga_anak'] ?? 0)) * $child + ((float) ($v['harga_infant'] ?? 0)) * $infant);
-        $total       = $vendorPrice + $markup * $payingPax;
+        $markup      = SettingController::computeTravelFee('pelni', $vendorPrice, $payingPax); // total biaya penanganan (0 = tak tampil)
+        $adminFee    = SettingController::travelAdminFee('pelni');                              // biaya admin flat (0 = tak tampil)
+        $total       = $vendorPrice + $markup + $adminFee;
         $departYmd   = substr($v['departure_date'], 0, 4) . '-' . substr($v['departure_date'], 4, 2) . '-' . substr($v['departure_date'], 6, 2);
         [$promo, $promoDiscount] = $this->resolveTravelPromo($request->input('promo_code'), 'pelni', (float) $total, $departYmd);
 
@@ -477,6 +481,7 @@ class TravelBookingController extends Controller
             'pax'          => $payingPax + $infant,
             'vendor_price' => $vendorPrice,
             'markup'       => $markup,
+            'admin_fee'    => $adminFee,
             'total_price'  => $total - $promoDiscount,
             'promo_id'       => $promo?->id,
             'promo_discount' => $promoDiscount,

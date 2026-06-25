@@ -43,6 +43,13 @@
             <tr><td style="padding:10px 0; color:#64748b;">{{ $serviceLabel }}</td><td style="padding:10px 0; text-align:right; font-weight:bold;">{{ $b->service_name ?: '—' }}</td></tr>
             <tr><td style="padding:10px 0; color:#64748b; border-top:1px solid #f1f5f9;">Kelas</td><td style="padding:10px 0; text-align:right; font-weight:bold; border-top:1px solid #f1f5f9;">{{ $b->class ?: '—' }}</td></tr>
             <tr><td style="padding:10px 0; color:#64748b; border-top:1px solid #f1f5f9;">Penumpang</td><td style="padding:10px 0; text-align:right; font-weight:bold; border-top:1px solid #f1f5f9;">{{ $b->pax }} orang</td></tr>
+            @php $admFee = (int) $b->admin_fee; $svcFee = max(0, (int) $b->total_price - (int) $b->vendor_price + (int) $b->promo_discount - $admFee); @endphp
+            @if($svcFee > 0)
+            <tr><td style="padding:10px 0; color:#64748b; border-top:1px solid #f1f5f9;">Biaya Penanganan</td><td style="padding:10px 0; text-align:right; font-weight:bold; border-top:1px solid #f1f5f9;">Rp {{ number_format($svcFee, 0, ',', '.') }}</td></tr>
+            @endif
+            @if($admFee > 0)
+            <tr><td style="padding:10px 0; color:#64748b; border-top:1px solid #f1f5f9;">Biaya Admin</td><td style="padding:10px 0; text-align:right; font-weight:bold; border-top:1px solid #f1f5f9;">Rp {{ number_format($admFee, 0, ',', '.') }}</td></tr>
+            @endif
             <tr><td style="padding:12px 0; color:#1e293b; font-weight:bold; border-top:1px solid #e2e8f0;">Total</td><td style="padding:12px 0; text-align:right; font-weight:bold; font-size:17px; color:{{ $accent }}; border-top:1px solid #e2e8f0;">Rp {{ $totalPrice }}</td></tr>
           </table>
 

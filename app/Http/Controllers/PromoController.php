@@ -295,7 +295,7 @@ class PromoController extends Controller
         $promo = Promo::findOrFail($id);
         $user  = $request->user();
 
-        if (!$user->hasAnyRole(['admin', 'superadmin']) && $promo->owner_id !== $user->id) {
+        if (!$user->hasAnyRole(['admin', 'superadmin']) && (int) $promo->owner_id !== (int) $user->id) {
             return response()->json(['success' => false, 'message' => 'Tidak diizinkan.'], 403);
         }
 
@@ -360,7 +360,7 @@ class PromoController extends Controller
         $promo = Promo::findOrFail($id);
         $user  = $request->user();
 
-        if (!$user->hasAnyRole(['admin', 'superadmin']) && $promo->owner_id !== $user->id) {
+        if (!$user->hasAnyRole(['admin', 'superadmin']) && (int) $promo->owner_id !== (int) $user->id) {
             return response()->json(['success' => false, 'message' => 'Tidak diizinkan.'], 403);
         }
 
