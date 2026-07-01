@@ -131,13 +131,64 @@ class HotelManageController extends Controller
         ]);
     }
 
-    public function destroy(Request $request, string $id)
+    /**
+     * Hapus PERMANEN satu/lebih hotel BESERTA seluruh data terkait (booking history dll).
+     * GATE KERAS: hanya akun superadmin dengan email aldeftech@gmail.com.
+     * Akun lain (termasuk superadmin lain) DITOLAK — superadmin biasa tidak punya tombol hapus.
+     */
+    public function bulkDestroy(Request $request)
     {
-        $hotel = Hotel::findOrFail($id);
-        ActivityLogService::log($request->user()->id, 'ADMIN_DELETE_HOTEL', 'hotel', $id, $request);
-        $hotel->delete();
+        $user = $request->user();
+        if (!$user || strtolower(trim((string) $user->email)) !== 'aldeftech@gmail.com') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Akses ditolak. Fitur hapus akomodasi khusus akun tertentu.',
+            ], 403);
+        }
 
-        return response()->json(['success' => true, 'message' => 'Hotel berhasil dihapus.']);
+        $data = $request->validate([
+            'ids'   => 'required|array|min:1',
+            'ids.*' => 'integer',
+        ]);
+        $ids = array_values(array_unique(array_map('intval', $data['ids'])));
+
+        $deleted = \DB::transaction(function () use ($ids) {
+            $count = 0;
+            foreach (Hotel::whereIn('id', $ids)->get() as $hotel) {
+                $this->purgeHotel($hotel);
+                $count++;
+            }
+            return $count;
+        });
+
+        ActivityLogService::log($user->id, 'ADMIN_BULK_DELETE_HOTEL', 'hotel', null, $request);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Berhasil menghapus {$deleted} akomodasi beserta seluruh data terkait.",
+            'deleted' => $deleted,
+        ]);
+    }
+
+    /**
+     * Hapus hotel + seluruh data terkait (FK RESTRICT) dalam satu transaksi pemanggil.
+     * Urutan: payments → chat_rooms (chat_messages cascade) → bookings → hotel.
+     * (rooms/reviews/rate_plans/hotel_fees cascade otomatis; loyalty_points.booking_id null-on-delete).
+     */
+    private function purgeHotel(Hotel $hotel): void
+    {
+        $bookingIds = $hotel->bookings()->pluck('id');
+
+        if ($bookingIds->isNotEmpty()) {
+            \DB::table('payments')->whereIn('booking_id', $bookingIds)->delete();
+            \DB::table('chat_rooms')->whereIn('booking_id', $bookingIds)->delete();
+            \DB::table('bookings')->whereIn('id', $bookingIds)->delete();
+        }
+
+        // Chat room yang menempel langsung ke hotel (hotel_id) tanpa booking.
+        \DB::table('chat_rooms')->where('hotel_id', $hotel->id)->delete();
+
+        $hotel->delete();
     }
 
     /**
@@ -149,7 +200,9 @@ class HotelManageController extends Controller
         $hotel = Hotel::findOrFail($id);
 
         $data = $request->validate([
-            'commission_percent' => 'required|numeric|min:0|max:100',
+            'commission_percent'         => 'required|numeric|min:0|max:100',
+            'commission_percent_weekly'  => 'nullable|numeric|min:0|max:100',
+            'commission_percent_monthly' => 'nullable|numeric|min:0|max:100',
         ]);
 
         $hotel->update($data);

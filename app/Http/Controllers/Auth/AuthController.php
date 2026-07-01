@@ -71,7 +71,7 @@ class AuthController extends Controller
         $token = $user->createToken('auth-token')->plainTextToken;
 
         if ($isNew) {
-            try { Mail::to($user->email)->queue(new \App\Mail\WelcomeMail($user)); } catch (\Throwable) {}
+            try { Mail::to($user->email)->queue(new \App\Mail\WelcomeMail($user, true)); } catch (\Throwable) {}
         }
         ActivityLogService::log($user->id, $isNew ? 'REGISTER_OWNER' : 'ADD_ROLE_OWNER', 'user', $user->id, $request);
 

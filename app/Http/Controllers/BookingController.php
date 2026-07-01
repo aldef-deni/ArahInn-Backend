@@ -103,7 +103,7 @@ class BookingController extends Controller
     public function show(Request $request, string $id)
     {
         // Terima id numeric ATAU booking_code (URL ramah, mis. /orders/ARH123456)
-        $query = Booking::with(['hotel', 'room', 'payments', 'user:id,name,email']);
+        $query = Booking::with(['hotel', 'room', 'ratePlan:id,name', 'payments', 'user:id,name,email']);
         $booking = is_numeric($id)
             ? $query->find($id)
             : $query->where('booking_code', $id)->first();

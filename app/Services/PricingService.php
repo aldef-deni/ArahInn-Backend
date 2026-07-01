@@ -49,8 +49,9 @@ class PricingService
 
     /**
      * Komisi properti (fraksi) yang DIPOTONG dari setoran owner.
-     *   owner_payout = harga_listed × (1 − komisi). PPh sudah termasuk di komisi.
-     * Kalau commission_percent NULL → fallback default config (12%).
+     *   owner_payout = (harga − diskon campaign/ArahInn) × (1 − [komisi + 2% PPh]).
+     *   PPh 2% sudah termasuk di komisi (dipotong dari owner, bukan ditambah ke customer).
+     * Kalau commission_percent NULL → fallback default config (12% = 10% + PPh 2%).
      */
     private function resolveCommission(?Room $room): float
     {
@@ -58,7 +59,22 @@ class PricingService
         if (!$hotel || $hotel->commission_percent === null) {
             return $this->defaultMarkupPercent;
         }
-        return (float) $hotel->commission_percent / 100;
+        return ((float) $hotel->commission_percent + self::PPH_PERCENT) / 100;
+    }
+
+    /**
+     * Komisi (fraksi) untuk long-stay mingguan/bulanan, per properti.
+     *   weekly  → commission_percent_weekly
+     *   monthly → commission_percent_monthly
+     * NULL = belum diatur → 0 (tanpa komisi, opt-in). PPh 2% ditambahkan bila diatur.
+     */
+    private function resolveCommissionByStay(?Room $room, string $stayType): float
+    {
+        $hotel = $room?->hotel;
+        if (!$hotel) return 0.0;
+        $pct = $stayType === 'monthly' ? $hotel->commission_percent_monthly : $hotel->commission_percent_weekly;
+        if ($pct === null) return 0.0;
+        return ((float) $pct + self::PPH_PERCENT) / 100;
     }
 
     /**
@@ -176,7 +192,11 @@ class PricingService
         //     • Promo OWNER            → owner TIDAK menanggung (basis = harga listed penuh):
         //                                 harga × (1 − komisi)   → promo owner diserap ArahInn
         //   (PPh sudah termasuk di dalam komisi — internal platform, tak tampil ke customer)
-        $commissionRate = $isLongStay ? 0.0 : $this->resolveCommission($room);  // mis. 0.15
+        //   Harian → commission_percent; mingguan/bulanan → komisi long-stay per properti
+        //   (NULL = belum diatur → 0). PPh 2% sudah termasuk di tiap rate.
+        $commissionRate = $isLongStay
+            ? $this->resolveCommissionByStay($room, $stayType)
+            : $this->resolveCommission($room);
 
         $promoIsOwner = $promo && $promo->owner_id !== null;
         $rawDiscTotal = $campaignDiscount + $codeDiscount;
@@ -184,16 +204,10 @@ class PricingService
         $discountOwner   = round(($promoIsOwner ? $codeDiscount : 0) * $discScale, 2);
         $discountArahinn = round(($campaignDiscount + ($promoIsOwner ? 0 : $codeDiscount)) * $discScale, 2);
 
-        if ($isLongStay) {
-            // Long-stay: tanpa komisi. PEMBUAT promo yang menanggung →
-            //   promo OWNER → owner terima (harga paket − promo owner)
-            //   promo ARAHINN → owner terima penuh (ArahInn yang menanggung)
-            $ownerPayout = round(max(0, $originalBasePrice - $discountOwner), 2);
-        } else {
-            // Harian: basis komisi = harga − diskon ArahInn (diskon owner TIDAK mengurangi basis).
-            $commissionBase = max(0, $originalBasePrice - $discountArahinn);
-            $ownerPayout    = round($commissionBase * (1 - $commissionRate), 2);
-        }
+        // Basis komisi = harga listed − diskon ArahInn (diskon owner TIDAK mengurangi basis).
+        // Berlaku sama untuk harian & long-stay; rate yang membedakan.
+        $commissionBase = max(0, $originalBasePrice - $discountArahinn);
+        $ownerPayout    = round($commissionBase * (1 - $commissionRate), 2);
         // Laba ArahInn = yang dibayar customer untuk kamar (post-promo) − setoran owner + biaya layanan.
         $commissionProfit = round($basePrice - $ownerPayout + $serviceFee, 2);
 

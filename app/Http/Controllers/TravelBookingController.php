@@ -809,6 +809,19 @@ class TravelBookingController extends Controller
             'meta'        => array_merge($booking->meta ?? [], ['payment' => $d]),
         ]);
 
+        // Notifikasi e-tiket terbit (in-app + push Expo) → tap di app diarahkan ke detail tiket.
+        try {
+            $modaLabel = ['pesawat' => 'Pesawat', 'pelni' => 'Kapal Laut', 'kereta' => 'Kereta'][$booking->moda] ?? 'Travel';
+            $rute = ($booking->origin_name ?: $booking->origin) . ' → ' . ($booking->destination_name ?: $booking->destination);
+            \App\Services\NotificationService::send(
+                (int) $booking->user_id,
+                'travel_issued',
+                'E-Tiket Terbit',
+                "E-tiket {$modaLabel} {$booking->code} ({$rute}) sudah terbit. Ketuk untuk melihat tiket.",
+                ['booking_id' => $booking->id, 'code' => $booking->code, 'moda' => $booking->moda]
+            );
+        } catch (\Throwable $e) { /* notifikasi tak boleh menggagalkan penerbitan tiket */ }
+
         // PP: email ditahan, dikirim sekali (gabungan) setelah kedua leg terbit (lihat adminIssue).
         if ($sendEmail) {
             $this->sendEtiketEmail($booking->fresh(), $booking->user);

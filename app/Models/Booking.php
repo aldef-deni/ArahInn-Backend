@@ -9,7 +9,7 @@ class Booking extends Model
     protected $fillable = [
         'booking_code','user_id','hotel_id','room_id','rate_plan_id',
         'check_in','check_out','total_nights','stay_type','stay_plan_label','guests','room_count',
-        'base_price','markup_amount','promo_discount','loyalty_discount',
+        'base_price','markup_amount','promo_discount','campaign_discount','code_discount','loyalty_discount',
         'discount_arahinn','discount_owner','owner_payout','commission_profit',
         'tax_amount','total_price','price_suffix',
         'status','promo_id','voucher_code','notes',
@@ -23,6 +23,8 @@ class Booking extends Model
         'base_price'       => 'float',
         'markup_amount'    => 'float',
         'promo_discount'   => 'float',
+        'campaign_discount'=> 'float',
+        'code_discount'    => 'float',
         'loyalty_discount' => 'float',
         'discount_arahinn' => 'float',
         'discount_owner'   => 'float',

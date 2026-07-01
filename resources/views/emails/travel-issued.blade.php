@@ -40,7 +40,7 @@
           </table>
 
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; border-top:1px solid #e2e8f0;">
-            <tr><td style="padding:10px 0; color:#64748b;">{{ $serviceLabel }}</td><td style="padding:10px 0; text-align:right; font-weight:bold;">{{ $b->service_name ?: '—' }}</td></tr>
+            <tr><td style="padding:10px 0; color:#64748b;">{{ $serviceLabel }}</td><td style="padding:10px 0; text-align:right; font-weight:bold;">{{ !empty($airlineName) ? $airlineName . ' (' . ($b->service_name ?: '') . ')' : ($b->service_name ?: '—') }}</td></tr>
             <tr><td style="padding:10px 0; color:#64748b; border-top:1px solid #f1f5f9;">Kelas</td><td style="padding:10px 0; text-align:right; font-weight:bold; border-top:1px solid #f1f5f9;">{{ $b->class ?: '—' }}</td></tr>
             <tr><td style="padding:10px 0; color:#64748b; border-top:1px solid #f1f5f9;">Penumpang</td><td style="padding:10px 0; text-align:right; font-weight:bold; border-top:1px solid #f1f5f9;">{{ $b->pax }} orang</td></tr>
             @php $admFee = (int) $b->admin_fee; $svcFee = max(0, (int) $b->total_price - (int) $b->vendor_price + (int) $b->promo_discount - $admFee); @endphp

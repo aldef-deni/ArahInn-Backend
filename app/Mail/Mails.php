@@ -3,9 +3,11 @@
 namespace App\Mail;
 
 use App\Models\{User, Booking};
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
@@ -15,7 +17,8 @@ function formatRp(float $amount): string {
     return 'Rp ' . number_format($amount, 0, ',', '.');
 }
 
-function baseHtml(string $title, string $body): string {
+function baseHtml(string $title, string $body, string $brand = 'Arahinn'): string {
+    $year = date('Y');
     return <<<HTML
 <!DOCTYPE html>
 <html lang="id">
@@ -46,9 +49,9 @@ function baseHtml(string $title, string $body): string {
 </head>
 <body>
 <div class="wrap">
-  <div class="hdr"><h1>🏨 OTA Arahinn</h1><p>Pesan Hotel Terbaik, Harga Terbaik</p></div>
+  <div class="hdr"><h1>🏨 {$brand}</h1><p>Pesan Hotel Terbaik, Harga Terbaik</p></div>
   <div class="body">{$body}</div>
-  <div class="footer">© 2025 OTA Arahinn · Jika ada pertanyaan, email cs@arahinn.com</div>
+  <div class="footer">© {$year} {$brand} · Jika ada pertanyaan, email cs@arahinn.com</div>
 </div>
 </body>
 </html>
@@ -61,18 +64,26 @@ HTML;
 class WelcomeMail extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
-    public function __construct(public User $user) {}
+    public function __construct(public User $user, public bool $isOwner = false) {}
 
     public function envelope(): Envelope {
-        return new Envelope(subject: 'Selamat Datang di OTA Arahinn! 🎉');
+        $brand = $this->isOwner ? 'My ArahInn' : 'Arahinn';
+        return new Envelope(subject: "Selamat Datang di {$brand}! 🎉");
     }
 
     public function content(): Content {
+        $brand = $this->isOwner ? 'My ArahInn' : 'Arahinn';
+        $cta   = $this->isOwner
+            ? "<a class='btn' href='" . config('app.frontend_url') . "/owner'>Masuk ke Dashboard Mitra</a>"
+            : "<a class='btn' href='" . config('app.frontend_url') . "'>Cari Hotel Sekarang</a>";
+        $intro = $this->isOwner
+            ? "<p>Mulai kelola properti & reservasi Anda di dashboard mitra.</p>"
+            : "<p>Mulai temukan dan pesan hotel terbaik di seluruh Indonesia.</p>";
         $body = "<h2>Selamat datang, {$this->user->name}! 👋</h2>
-<p>Terima kasih telah mendaftar di OTA Arahinn. Akun Anda sudah aktif!</p>
-<p>Mulai temukan dan pesan hotel terbaik di seluruh Indonesia.</p>
-<a class='btn' href='" . config('app.frontend_url') . "'>Cari Hotel Sekarang</a>";
-        return new Content(htmlString: baseHtml('Selamat Datang', $body));
+<p>Terima kasih telah mendaftar di {$brand}. Akun Anda sudah aktif!</p>
+{$intro}
+{$cta}";
+        return new Content(htmlString: baseHtml('Selamat Datang', $body, $brand));
     }
 }
 
@@ -122,92 +133,115 @@ class NewReservationMail extends Mailable implements ShouldQueue
         return new Envelope(subject: "Reservasi Baru — Itinerary ID {$this->booking->booking_code}");
     }
 
+    /**
+     * Hitung rincian pendapatan mitra + data untuk PDF E-Voucher owner.
+     * Basis pendapatan owner = base_price − diskon yang ditanggung ArahInn.
+     * Komisi nominal = basis − owner_payout (sesuai skema beban diskon).
+     */
+    private function voucherData(): array {
+        $b = $this->booking->loadMissing(['hotel', 'room']);
+
+        // Formula resmi: owner = (harga setelah dipotong campaign) × (1 − [komisi% + 2% PPh]).
+        //   • basis komisi = base_price + discount_owner  (= harga − diskon campaign/ArahInn).
+        //   • rate = komisi sesuai jenis menginap + 2% PPh:
+        //       harian  → commission_percent (fallback 12% bila NULL)
+        //       mingguan→ commission_percent_weekly  (NULL → 0, tanpa komisi)
+        //       bulanan → commission_percent_monthly (NULL → 0, tanpa komisi)
+        $PPH        = 2.0;
+        $isLongStay = ($b->stay_type ?? 'daily') !== 'daily';
+        $commBase   = max(0, (float) $b->base_price + (float) $b->discount_owner);
+        $fmtPct     = fn ($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
+
+        if ($isLongStay) {
+            $col     = ($b->stay_type === 'monthly') ? 'commission_percent_monthly' : 'commission_percent_weekly';
+            $stayPct = $b->hotel?->{$col};
+            if ($stayPct === null) {
+                $effRate = 0.0;
+                $pctText = '';
+            } else {
+                $effRate = ((float) $stayPct + $PPH) / 100;
+                $pctText = ' (' . $fmtPct($stayPct) . '% + PPh ' . $fmtPct($PPH) . '%)';
+            }
+        } else {
+            $commPct = $b->hotel?->commission_percent;
+            if ($commPct === null) {
+                $effRate = (float) config('ota.markup_percent', 12) / 100;   // 12% (sudah termasuk PPh)
+                $pctText = ' (' . $fmtPct(config('ota.markup_percent', 12)) . '%)';
+            } else {
+                $effRate = ((float) $commPct + $PPH) / 100;
+                $pctText = ' (' . $fmtPct($commPct) . '% + PPh ' . $fmtPct($PPH) . '%)';
+            }
+        }
+
+        $commNom = round($commBase * $effRate, 2);
+        $payout  = round($commBase - $commNom, 2);
+
+        // Label "Harga Kamar" dinamis sesuai diskon yang dipakai (promo kode / campaign / keduanya).
+        //   campaign_discount & code_discount disimpan sejak migrasi diskon-breakdown;
+        //   booking lama (kolom null) → fallback: promo_id menandai pemakaian kode promo.
+        $campDisc = $b->campaign_discount;
+        $codeDisc = $b->code_discount;
+        if ($campDisc !== null || $codeDisc !== null) {
+            $hasCampaign = (float) $campDisc > 0;
+            $hasPromo    = (float) $codeDisc > 0;
+        } else {
+            $hasPromo    = $b->promo_id !== null;
+            $hasCampaign = !$hasPromo && (float) $b->promo_discount > 0;
+        }
+        $suffix = '';
+        if ($hasPromo && $hasCampaign)  $suffix = ' (setelah diskon promo & campaign)';
+        elseif ($hasPromo)              $suffix = ' (setelah diskon promo)';
+        elseif ($hasCampaign)           $suffix = ' (setelah diskon campaign)';
+
+        return [
+            'booking'          => $b,
+            'hotel'            => $b->hotel,
+            'room'             => $b->room,
+            'checkIn'          => $b->check_in?->translatedFormat('D, d M Y') ?? '-',
+            'checkOut'         => $b->check_out?->translatedFormat('D, d M Y') ?? '-',
+            'nights'           => $b->total_nights,
+            'priceBase'        => $commBase,   // harga kamar basis komisi
+            'priceLabel'       => 'Harga Kamar' . $suffix,
+            'priceSuffix'      => $suffix,
+            'ownerPayout'      => $payout,
+            'commissionNominal'=> $effRate > 0 ? $commNom : null,
+            'commissionPctText'=> $pctText,
+        ];
+    }
+
     public function content(): Content {
-        $b      = $this->booking;
-        $ci     = $b->check_in?->translatedFormat('D, d M Y') ?? $b->check_in?->format('D, d M Y');
-        $co     = $b->check_out?->translatedFormat('D, d M Y') ?? $b->check_out?->format('D, d M Y');
-        $nights = $b->total_nights;
-        $bookedAt = $b->created_at?->format('d M Y') . ' · ' . $b->created_at?->format('H:i');
+        $vd = $this->voucherData();
 
-        $notesRow = $b->notes
-            ? "<div class='row'><span class='label'>Catatan Tamu</span><span class='val'>" . htmlspecialchars($b->notes) . "</span></div>"
-            : '';
-        $phoneRow = $b->guest_phone
-            ? "<div class='row'><span class='label'>Telepon Tamu</span><span class='val'>" . htmlspecialchars($b->guest_phone) . "</span></div>"
-            : '';
+        return new Content(
+            view: 'emails.new-reservation',
+            with: [
+                'booking'           => $vd['booking'],
+                'hotel'             => $vd['hotel'],
+                'room'              => $vd['room'],
+                'checkIn'           => $vd['checkIn'],
+                'checkOut'          => $vd['checkOut'],
+                'nights'            => $vd['nights'],
+                'frontendUrl'       => rtrim(config('app.frontend_url', 'https://my.arahinn.com'), '/'),
+                'priceLabel'        => $vd['priceLabel'],
+                'priceSuffix'       => $vd['priceSuffix'],
+                'priceBaseRp'       => formatRp($vd['priceBase']),
+                'ownerPayoutRp'     => formatRp($vd['ownerPayout']),
+                'commissionRp'      => $vd['commissionNominal'] !== null ? formatRp($vd['commissionNominal']) : null,
+                'commissionPctText' => $vd['commissionPctText'],
+                'totalPriceRp'      => formatRp((float) $vd['booking']->total_price),
+            ],
+        );
+    }
 
-        $body = "
-<h2 style='color:#1d4ed8;font-size:20px;margin:0 0 6px'>Hi " . htmlspecialchars($b->hotel?->name ?? 'Mitra Properti') . ",</h2>
-<p style='margin:0 0 8px;color:#475569'>Terima kasih telah menjadi mitra properti <strong>Arahinn.com</strong>.</p>
-<p style='margin:0 0 20px;color:#334155'>Anda mendapatkan <strong>reservasi baru</strong>. E-voucher sudah dikirimkan ke tamu.</p>
+    /** Lampirkan PDF E-Voucher khusus mitra (gaya tiket.com) ke email owner. */
+    public function attachments(): array {
+        $code    = $this->booking->booking_code;
+        $voucher = Pdf::loadView('pdf.owner-voucher', $this->voucherData())->setPaper('a4', 'portrait');
 
-<table width='100%' cellpadding='0' cellspacing='0' style='border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:20px'>
-  <tr>
-    <td style='background:#f8faff;padding:14px 20px;border-bottom:1px solid #e2e8f0'>
-      <table width='100%' cellpadding='0' cellspacing='0'>
-        <tr>
-          <td><span style='font-weight:700;font-size:15px;color:#1e293b'>Reservation Details</span></td>
-          <td align='right'><span style='color:#94a3b8;font-size:12px'>Booked on {$bookedAt}</span></td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-  <tr>
-    <td style='padding:20px'>
-
-      <!-- Check-in / Nights / Check-out -->
-      <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:18px'>
-        <tr>
-          <td width='38%' valign='top'>
-            <div style='font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em'>Check-in</div>
-            <div style='font-weight:700;font-size:15px;color:#1e293b;margin-top:5px'>{$ci}</div>
-          </td>
-          <td width='24%' align='center' valign='middle'>
-            <div style='font-size:12px;color:#64748b;text-align:center;padding-top:14px'>
-              <span style='display:block;width:100%;border-top:1px dashed #cbd5e1;margin-bottom:6px'></span>
-              {$nights} Malam
-            </div>
-          </td>
-          <td width='38%' align='right' valign='top'>
-            <div style='font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;text-align:right'>Check-out</div>
-            <div style='font-weight:700;font-size:15px;color:#1e293b;margin-top:5px;text-align:right'>{$co}</div>
-          </td>
-        </tr>
-      </table>
-
-      <!-- Room detail -->
-      <table width='100%' cellpadding='0' cellspacing='0' style='border-top:1px solid #f1f5f9;padding-top:16px'>
-        <tr>
-          <td valign='top'>
-            <div style='font-weight:700;color:#1e293b;font-size:14px'>" . htmlspecialchars($b->room?->name ?? '-') . "</div>
-            <div style='color:#94a3b8;font-size:11px;margin-top:3px;text-transform:uppercase;letter-spacing:.05em'>Room and Rate Plan</div>
-            <div style='color:#475569;font-size:13px;margin-top:4px'>" . htmlspecialchars(ucfirst($b->room?->type ?? '')) . " · Room only</div>
-          </td>
-          <td align='right' valign='top'>
-            <span style='color:#2563eb;font-size:12px'>Itinerary ID: {$b->booking_code}</span>
-          </td>
-        </tr>
-      </table>
-
-      <!-- Info rows -->
-      <div style='margin-top:16px'>
-        <div class='row'><span class='label'>Jumlah Kamar</span><span class='val'>1 kamar</span></div>
-        <div class='row'><span class='label'>Jumlah Tamu</span><span class='val'>{$b->guests} orang</span></div>
-        <div class='row'><span class='label'>Nama Tamu</span><span class='val'>" . htmlspecialchars($b->guest_name) . "</span></div>
-        <div class='row'><span class='label'>Email Tamu</span><span class='val'>" . htmlspecialchars($b->guest_email) . "</span></div>
-        {$phoneRow}
-        {$notesRow}
-        <div class='row'><span class='label'>Total Pembayaran</span><span class='val total-val'>" . formatRp((float)$b->total_price) . "</span></div>
-      </div>
-
-    </td>
-  </tr>
-</table>
-
-<p style='color:#64748b;font-size:13px'>Pastikan kamar sudah siap sebelum tanggal check-in. Jika ada pertanyaan, hubungi <a href='mailto:cs@arahinn.com' style='color:#2563eb;text-decoration:none'>cs@arahinn.com</a>.</p>
-<a class='btn' href='" . config('app.frontend_url', 'https://my.arahinn.com') . "/owner/pesanan'>Lihat Semua Reservasi</a>";
-
-        return new Content(htmlString: baseHtml('Reservasi Baru', $body));
+        return [
+            Attachment::fromData(fn () => $voucher->output(), "E-Voucher-Mitra-{$code}.pdf")
+                ->withMime('application/pdf'),
+        ];
     }
 }
 
@@ -220,7 +254,7 @@ class PasswordResetMail extends Mailable implements ShouldQueue
     public function __construct(public User $user, public string $resetUrl) {}
 
     public function envelope(): Envelope {
-        return new Envelope(subject: 'Reset Password OTA Arahinn');
+        return new Envelope(subject: 'Reset Password Arahinn');
     }
 
     public function content(): Content {

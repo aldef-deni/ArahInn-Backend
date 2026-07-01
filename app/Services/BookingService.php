@@ -133,6 +133,8 @@ class BookingService
                     'base_price'       => $priceData['base_price'],
                     'markup_amount'    => $priceData['markup_amount'],
                     'promo_discount'   => $priceData['promo_discount'],
+                    'campaign_discount'=> $priceData['campaign_discount'] ?? 0,
+                    'code_discount'    => $priceData['code_discount'] ?? 0,
                     'discount_arahinn' => $priceData['discount_arahinn'] ?? 0,
                     'discount_owner'   => $priceData['discount_owner'] ?? 0,
                     'owner_payout'     => $priceData['owner_payout'] ?? null,

@@ -10,7 +10,7 @@ class Hotel extends Model
     protected $fillable = [
         // Core
         'owner_id','name','alias','category','slug','description',
-        'is_brand_chain','currency','commission_percent','star_rating',
+        'is_brand_chain','currency','commission_percent','commission_percent_weekly','commission_percent_monthly','star_rating',
         // Lokasi
         'address','city','district','village','province','country',
         'postal_code','latitude','longitude',
@@ -65,6 +65,8 @@ class Hotel extends Model
         'booking_min_age'    => 'integer',
         'star_rating'        => 'integer',
         'commission_percent' => 'decimal:2',
+        'commission_percent_weekly' => 'decimal:2',
+        'commission_percent_monthly' => 'decimal:2',
         'latitude'           => 'decimal:8',
         'longitude'          => 'decimal:8',
         'approved_at'        => 'datetime',

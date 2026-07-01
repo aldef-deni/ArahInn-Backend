@@ -39,7 +39,7 @@
 
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:12.5px; border-top:1px solid #f1f5f9;">
                 <tr><td style="padding:7px 0; color:#64748b;">Kode Booking</td><td style="padding:7px 0; text-align:right; font-weight:bold; font-family:'Courier New',monospace;">{{ $b->code }}</td></tr>
-                <tr><td style="padding:7px 0; color:#64748b; border-top:1px solid #f1f5f9;">{{ $leg['serviceLabel'] }}</td><td style="padding:7px 0; text-align:right; font-weight:bold; border-top:1px solid #f1f5f9;">{{ $b->service_name ?: '—' }} · {{ $b->class ?: '—' }}</td></tr>
+                <tr><td style="padding:7px 0; color:#64748b; border-top:1px solid #f1f5f9;">{{ $leg['serviceLabel'] }}</td><td style="padding:7px 0; text-align:right; font-weight:bold; border-top:1px solid #f1f5f9;">{{ !empty($leg['airlineName']) ? $leg['airlineName'] . ' (' . ($b->service_name ?: '') . ')' : ($b->service_name ?: '—') }} · {{ $b->class ?: '—' }}</td></tr>
               </table>
               @if(!empty($leg['baggage']))
               <div style="margin-top:10px; padding:8px 10px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px;">

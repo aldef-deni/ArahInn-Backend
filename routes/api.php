@@ -443,8 +443,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::prefix('hotels')->middleware('role:superadmin|admin')->group(function () {
             Route::get('/pending',       [HotelManageController::class, 'pending']);
             Route::post('/',             [HotelManageController::class, 'store']);
+            // Hapus massal akomodasi (HARD DELETE + booking history) — gate KERAS per-email
+            // di controller (khusus aldeftech@gmail.com). Superadmin biasa tidak bisa hapus.
+            Route::post('/bulk-delete',  [HotelManageController::class, 'bulkDestroy']);
             Route::put('/{id}',          [HotelManageController::class, 'update']);
-            Route::delete('/{id}',       [HotelManageController::class, 'destroy']);
             Route::post('/{id}/approve', [HotelManageController::class, 'approve']);
             Route::post('/{id}/block',   [HotelManageController::class, 'block']);
             Route::put('/{id}/commission', [HotelManageController::class, 'updateCommission'])
