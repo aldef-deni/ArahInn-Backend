@@ -44,27 +44,38 @@ class TravelBookingController extends Controller
             'grade'             => 'required|string',
             'class'             => 'required|string',
             'adult'             => 'required|integer|min:1|max:7',
+            'child'             => 'nullable|integer|min:0|max:6',
             'infant'            => 'nullable|integer|min:0|max:4',
             'price_adult'       => 'required|numeric',
+            'price_child'       => 'nullable|numeric',
             'markup'            => 'nullable|integer|min:0',
             'train_name'        => 'required|string',
             'departure_station' => 'required|string',
             'departure_time'    => 'required|string',
             'arrival_station'   => 'required|string',
             'arrival_time'      => 'required|string',
-            'passengers.adults'             => 'required|array|min:1',
-            'passengers.adults.*.name'      => 'required|string',
-            'passengers.adults.*.birthdate' => 'required|date_format:Y-m-d',
-            'passengers.adults.*.phone'     => 'required|string',
-            'passengers.adults.*.id_number' => 'required|string',
-            'passengers.infants'            => 'nullable|array',
+            'passengers.adults'                  => 'required|array|min:1',
+            'passengers.adults.*.name'           => 'required|string',
+            'passengers.adults.*.birthdate'      => 'required|date_format:Y-m-d',
+            'passengers.adults.*.phone'          => 'required|string',
+            'passengers.adults.*.id_number'      => 'required|string',
+            'passengers.children'                => 'nullable|array',
+            'passengers.children.*.name'         => 'required|string',
+            'passengers.children.*.birthdate'    => 'required|date_format:Y-m-d',
+            'passengers.children.*.id_number'    => 'required|string',
+            'passengers.infants'                 => 'nullable|array',
         ]);
 
-        $adult  = (int) $v['adult'];
+        $adult = (int) $v['adult'];
+        $child = (int) ($v['child'] ?? 0);
         $infant = (int) ($v['infant'] ?? 0);
+        $priceAdult = (float) $v['price_adult'];
+        $priceChild = (float) ($v['price_child'] ?? $v['price_adult']);
+        $payingPax = $adult + $child;
+
         // Hitung total + validasi promo SEBELUM booking vendor (hindari booking sia-sia)
-        $vendorPrice = (int) round(((float) $v['price_adult']) * $adult);
-        $markup      = SettingController::computeTravelFee('kereta', $vendorPrice, $adult); // total biaya penanganan (0 = tak tampil)
+        $vendorPrice = (int) round(($priceAdult * $adult) + ($priceChild * $child));
+        $markup      = SettingController::computeTravelFee('kereta', $vendorPrice, $payingPax); // total biaya penanganan (0 = tak tampil)
         $total       = $vendorPrice + $markup;
         [$promo, $promoDiscount] = $this->resolveTravelPromo($request->input('promo_code'), 'kereta', (float) $total, $v['date']);
 
@@ -76,10 +87,10 @@ class TravelBookingController extends Controller
             'grade'            => $v['grade'],
             'class'            => $v['class'],
             'adult'            => $adult,
-            'child'            => 0,
+            'child'            => $child,
             'infant'           => $infant,
-            'priceAdult'       => $v['price_adult'],
-            'priceChild'       => '-',
+            'priceAdult'       => $priceAdult,
+            'priceChild'       => $priceChild,
             'priceInfant'      => '-',
             'trainName'        => $v['train_name'],
             'departureStation' => $v['departure_station'],
@@ -87,11 +98,15 @@ class TravelBookingController extends Controller
             'arrivalStation'   => $v['arrival_station'],
             'arrivalTime'      => $v['arrival_time'],
             'passengers'       => [
-                'adults'  => array_map(fn($p) => [
+                'adults'   => array_map(fn($p) => [
                     'name' => $p['name'], 'birthdate' => $p['birthdate'],
                     'phone' => $p['phone'], 'idNumber' => $p['id_number'],
                 ], $v['passengers']['adults']),
-                'infants' => array_map(fn($p) => [
+                'children' => array_map(fn($p) => [
+                    'name' => $p['name'], 'birthdate' => $p['birthdate'],
+                    'idNumber' => $p['id_number'],
+                ], $v['passengers']['children'] ?? []),
+                'infants'  => array_map(fn($p) => [
                     'name' => $p['name'] ?? '', 'birthdate' => $p['birthdate'] ?? '',
                     'idNumber' => $p['id_number'] ?? '',
                 ], $v['passengers']['infants'] ?? []),
@@ -116,7 +131,7 @@ class TravelBookingController extends Controller
             'arrive_time'  => $v['arrival_time'],
             'service_name' => $v['train_name'],
             'class'        => $v['class'],
-            'pax'          => $adult,
+            'pax'          => $payingPax,
             'vendor_price' => $vendorPrice,
             'markup'       => $markup,
             'total_price'  => $total - $promoDiscount,
@@ -908,3 +923,4 @@ class TravelBookingController extends Controller
         return $pdf->download("E-Tiket-{$booking->code}.pdf");
     }
 }
+
