@@ -211,18 +211,37 @@ class PpobService
                 return $trx;
             }
 
-            // Inquiry SUKSES → set tagihan + admin
-            $tagihan = $normalized['tagihan']     ?? 0;
-            $admin   = $normalized['adm']         ?? $product->admin_fee;
-            $total   = $normalized['total_bayar'] ?? ($tagihan + $admin);
+            // Inquiry SUKSES → set harga.
+            $admin = $normalized['adm'] ?? $product->admin_fee;
 
-            $trx->update([
-                'price_buy'   => $tagihan + $admin,  // cost ke Rajabiller
-                'price_sell'  => $total,             // user bayar
-                'admin_fee'   => $admin,
-                'total_amount'=> $total,
-                'status'      => 'pending', // waiting user confirm
-            ]);
+            if (!empty($extra['nominal']) && is_numeric($extra['nominal'])) {
+                // Variable-nominal (PLN Prabayar / E-Wallet open denom): harga dari NOMINAL,
+                // bukan tagihan (prabayar tak punya tagihan). Samakan dgn createPrepaidTransaction.
+                $nominal   = (float) $extra['nominal'];
+                $markup    = (int) max(500, $nominal * 0.005); // 0.5% min 500
+                $priceBuy  = $nominal + $admin;
+                $priceSell = $priceBuy + $markup;
+
+                $trx->update([
+                    'price_buy'    => $priceBuy,
+                    'price_sell'   => $priceSell,
+                    'admin_fee'    => $admin,
+                    'total_amount' => $priceSell,
+                    'status'       => 'pending',
+                ]);
+            } else {
+                // Postpaid: harga dari tagihan hasil inquiry.
+                $tagihan = $normalized['tagihan']     ?? 0;
+                $total   = $normalized['total_bayar'] ?? ($tagihan + $admin);
+
+                $trx->update([
+                    'price_buy'    => $tagihan + $admin,  // cost ke Rajabiller
+                    'price_sell'   => $total,             // user bayar
+                    'admin_fee'    => $admin,
+                    'total_amount' => $total,
+                    'status'       => 'pending', // waiting user confirm
+                ]);
+            }
 
             return $trx;
         });

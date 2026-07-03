@@ -45,17 +45,34 @@ class SyncPpobCatalog extends Command
         'FREN'                => 'pulsa-data',
         'PLN'                 => 'pln',
         'EMONEY'              => 'ewallet',
-        'PDAM'                => 'tagihan',
-        'TELKOM'              => 'tagihan',
-        'TV BERLANGGANAN'     => 'tagihan',
-        'MULTI FINANCE'       => 'tagihan',
-        'ASURANSI'            => 'tagihan',
-        'KARTU KREDIT'        => 'tagihan',
-        'TELEPON PASCA BAYAR' => 'tagihan',
-        'PAJAK'               => 'tagihan',
-        'SAMSAT'              => 'tagihan',
+        'PDAM'                => 'pdam',
+        'TELKOM'              => 'telkom',
+        'TV BERLANGGANAN'     => 'tv-kabel',
+        'MULTI FINANCE'       => 'multifinance',
+        'ASURANSI'            => 'asuransi',
+        'KARTU KREDIT'        => 'kartu-kredit',
+        'TELEPON PASCA BAYAR' => 'telepon-pasca',
+        'PAJAK'               => 'pajak',
+        'SAMSAT'              => 'samsat',
         'GAME ONLINE'         => 'game',
         'GAME ONLINE IN'      => 'game',
+    ];
+
+    /**
+     * Sub-kategori yang tergabung dalam MODUL "Bayar Tagihan" (group=tagihan di FE),
+     * tapi tampil sebagai kartu terpisah.
+     * code => [nama, ikon lucide (FE ICONS), warna hex, sort_order]
+     */
+    private const TAGIHAN_CATEGORIES = [
+        'pdam'          => ['PDAM',               'Droplets',   '#0ea5e9', 31],
+        'telkom'        => ['Telkom / IndiHome',  'Router',     '#dc2626', 32],
+        'tv-kabel'      => ['TV Berlangganan',    'Tv',         '#7c3aed', 33],
+        'multifinance'  => ['Multifinance',       'CreditCard', '#f59e0b', 34],
+        'asuransi'      => ['Asuransi / BPJS',    'HeartPulse', '#16a34a', 35],
+        'kartu-kredit'  => ['Kartu Kredit',       'CreditCard', '#0f766e', 36],
+        'telepon-pasca' => ['Telepon Pascabayar', 'Smartphone', '#2563eb', 37],
+        'pajak'         => ['Pajak (PBB)',        'Landmark',   '#b45309', 38],
+        'samsat'        => ['Samsat',             'Car',        '#4f46e5', 39],
     ];
 
     private RajaBillerService $svc;
@@ -103,6 +120,14 @@ class SyncPpobCatalog extends Command
             $this->info("└─ Group {$g} done\n");
         }
 
+        // Kategori lama gabungan "tagihan" kini dipecah per jenis — nonaktifkan bila sudah kosong
+        // agar tak tampil sebagai kartu "Bayar Tagihan" ganda di FE.
+        $legacy = PpobCategory::where('code', 'tagihan')->first();
+        if ($legacy && $legacy->is_active && $legacy->products()->count() === 0) {
+            $legacy->update(['is_active' => false]);
+            $this->warn("Kategori lama 'tagihan' dinonaktifkan (produk sudah dipindah ke kategori spesifik).");
+        }
+
         $this->newLine();
         $this->info("┌─────────────────────────────────────────┐");
         $this->info("│  Sync summary                           │");
@@ -126,14 +151,32 @@ class SyncPpobCatalog extends Command
             ['code' => $categoryCode],
             [
                 'name'       => $this->categoryName($categoryCode),
-                'group'      => $categoryCode,
+                'group'      => $this->moduleGroup($categoryCode),
                 'type'       => $this->categoryType($categoryCode, $group),
+                'icon'       => $this->categoryIcon($categoryCode),
+                'color'      => $this->categoryColor($categoryCode),
                 'is_active'  => true,
                 'sort_order' => $this->categorySortOrder($categoryCode),
             ]
         );
 
         return $cat->id;
+    }
+
+    // Modul FE tempat kategori tampil. Sub-tagihan → 'tagihan'; lainnya = code sendiri.
+    private function moduleGroup(string $code): string
+    {
+        return isset(self::TAGIHAN_CATEGORIES[$code]) ? 'tagihan' : $code;
+    }
+
+    private function categoryIcon(string $code): ?string
+    {
+        return self::TAGIHAN_CATEGORIES[$code][1] ?? null;
+    }
+
+    private function categoryColor(string $code): ?string
+    {
+        return self::TAGIHAN_CATEGORIES[$code][2] ?? null;
     }
 
     private function upsertProduct(array $item, int $categoryId, string $group, float $markupPct, float $markupMin): string
@@ -218,6 +261,7 @@ class SyncPpobCatalog extends Command
 
     private function categoryName(string $code): string
     {
+        if (isset(self::TAGIHAN_CATEGORIES[$code])) return self::TAGIHAN_CATEGORIES[$code][0];
         return match ($code) {
             'pulsa-data' => 'Pulsa & Data',
             'pln'        => 'Listrik PLN',
@@ -240,6 +284,7 @@ class SyncPpobCatalog extends Command
 
     private function categorySortOrder(string $code): int
     {
+        if (isset(self::TAGIHAN_CATEGORIES[$code])) return self::TAGIHAN_CATEGORIES[$code][3];
         return match ($code) {
             'pulsa-data' => 1,
             'pln'        => 2,
