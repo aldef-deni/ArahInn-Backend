@@ -5,10 +5,22 @@
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9; padding:24px 12px;">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px; background:#ffffff; border-radius:14px; overflow:hidden; box-shadow:0 4px 20px rgba(15,23,42,0.06);">
-        <!-- Header -->
-        <tr><td style="background:linear-gradient(135deg,#0f1e3d 0%,{{ $accent }} 100%); padding:28px 28px 24px; text-align:center;">
-          <img src="{{ $frontendUrl }}/logo-arahin.png" alt="ArahInn" width="120" style="height:auto; display:block; margin:0 auto 10px;">
-          <div style="font-size:11px; color:rgba(255,255,255,0.85); letter-spacing:1.5px; text-transform:uppercase;">E-Tiket {{ $modaLabel }}</div>
+        <!-- Header (putih + logo ArahInn · KAI · Rajabiller) -->
+        <tr><td style="background:#ffffff; padding:22px 24px 16px; border-bottom:1px solid #e2e8f0;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="text-align:left; vertical-align:middle; width:38%;">
+                <img src="{{ $frontendUrl }}/logo-arahin.png" alt="ArahInn" height="30" style="height:30px; width:auto; display:block;">
+              </td>
+              <td style="text-align:center; vertical-align:middle; width:28%;">
+                @if($b->moda === 'kereta')<img src="{{ $frontendUrl }}/kai.png" alt="KAI" height="28" style="height:28px; width:auto; display:inline-block;">@endif
+              </td>
+              <td style="text-align:right; vertical-align:middle; width:34%;">
+                @if($b->moda === 'kereta')<img src="{{ $frontendUrl }}/rajabiller.png" alt="Rajabiller" height="24" style="height:24px; width:auto; display:inline-block;">@endif
+              </td>
+            </tr>
+          </table>
+          <div style="font-size:11px; color:#64748b; letter-spacing:1.5px; text-transform:uppercase; text-align:center; margin-top:14px;">E-Tiket {{ $modaLabel }}</div>
         </td></tr>
 
         <!-- Body -->
@@ -59,7 +71,7 @@
             <div style="font-size:11px; font-weight:bold; color:#475569; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;">Data Penumpang</div>
             @foreach ($pax as $p)
               <div style="border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; margin-bottom:8px;">
-                <div style="font-size:13px; font-weight:bold; color:#1e293b;">{{ $p['name'] }} <span style="font-size:11px; color:#94a3b8; font-weight:normal;">· {{ $p['type'] }}</span></div>
+                <div style="font-size:13px; font-weight:bold; color:#1e293b;">{{ $p['name'] }} <span style="font-size:11px; color:#94a3b8; font-weight:normal;">· {{ $p['type'] }}</span>@if(!empty($p['seat']))<span style="float:right; font-size:11px; font-weight:bold; color:#ea580c;">{{ $p['seat'] }}</span>@endif</div>
                 <div style="font-size:12px; color:#64748b; margin-top:3px;">{{ $p['nationality'] }} · {{ $p['idLabel'] ?? 'NIK' }}: {{ $p['id'] ?: '—' }}@if(empty($p['isForeign']) && !empty($p['passport'])) · Paspor: {{ $p['passport'] }}@endif</div>
                 @if(!empty($p['hasPassport']) && (!empty($p['passportCountry']) || !empty($p['passportIssue']) || !empty($p['passportExpiry'])))
                   <div style="font-size:11px; color:#94a3b8; margin-top:2px;">@if(!empty($p['passportCountry']))Penerbit: {{ $p['passportCountry'] }}@endif @if(!empty($p['passportIssue']))· Terbit {{ $p['passportIssue'] }}@endif @if(!empty($p['passportExpiry']))· Berlaku s/d {{ $p['passportExpiry'] }}@endif</div>

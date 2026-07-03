@@ -2,23 +2,54 @@
      Dipakai oleh travel-ticket (1 leg) & travel-ticket-group (PP, di-loop per leg).
      Butuh: $logoBase64, $b, $modaLabel, $serviceLabel, $statusLabel, $issuedAt,
             $departTime, $arriveTime, $originName, $destinationName, $departDate, $pax, $totalPrice --}}
+@php
+  // Logo KAI & Rajabiller (base64) — hanya tiket KERETA.
+  $kaiBase64 = null; $rajabillerBase64 = null;
+  if (($b->moda ?? '') === 'kereta') {
+    $kp = public_path('kai.png');
+    if (is_file($kp)) $kaiBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($kp));
+    $rp = public_path('rajabiller.png');
+    if (is_file($rp)) $rajabillerBase64 = 'data:image/png;base64,' . base64_encode(file_get_contents($rp));
+  }
+@endphp
 <div class="header">
-  <table>
-    <tr>
-      <td style="vertical-align: top;">
-        @if (!empty($logoBase64))
-          <img src="{{ $logoBase64 }}" alt="ArahInn" style="height:40px; width:auto; display:block;">
-        @else
-          <div class="logo">ArahInn</div>
-          <div class="tagline">Travel &amp; Lifestyle Super App</div>
-        @endif
-      </td>
-      <td>
-        <div class="doc-title">E-TIKET {{ strtoupper($modaLabel) }}</div>
-        <div class="doc-sub">{{ $issuedAt }}</div>
-      </td>
-    </tr>
-  </table>
+  @if (($b->moda ?? '') === 'kereta')
+    {{-- Kereta: 3 logo — ArahInn · KAI · Rajabiller (background putih) --}}
+    <table>
+      <tr>
+        <td style="width:38%; vertical-align:middle;">
+          @if (!empty($logoBase64))<img src="{{ $logoBase64 }}" alt="ArahInn" style="height:34px; width:auto;">@else<div class="logo">ArahInn</div>@endif
+        </td>
+        <td style="width:28%; text-align:center; vertical-align:middle;">
+          @if (!empty($kaiBase64))<img src="{{ $kaiBase64 }}" alt="KAI" style="height:30px; width:auto;">@endif
+        </td>
+        <td style="width:34%; text-align:right; vertical-align:middle;">
+          @if (!empty($rajabillerBase64))<img src="{{ $rajabillerBase64 }}" alt="Rajabiller" style="height:26px; width:auto;">@endif
+        </td>
+      </tr>
+    </table>
+    <div style="text-align:center; margin-top:10px;">
+      <span class="doc-title" style="font-size:15px; text-align:center;">E-TIKET {{ strtoupper($modaLabel) }}</span>
+      <div class="doc-sub" style="text-align:center;">{{ $issuedAt }}</div>
+    </div>
+  @else
+    <table>
+      <tr>
+        <td style="vertical-align: top;">
+          @if (!empty($logoBase64))
+            <img src="{{ $logoBase64 }}" alt="ArahInn" style="height:40px; width:auto; display:block;">
+          @else
+            <div class="logo">ArahInn</div>
+            <div class="tagline">Travel &amp; Lifestyle Super App</div>
+          @endif
+        </td>
+        <td>
+          <div class="doc-title">E-TIKET {{ strtoupper($modaLabel) }}</div>
+          <div class="doc-sub">{{ $issuedAt }}</div>
+        </td>
+      </tr>
+    </table>
+  @endif
 </div>
 
 <div style="margin-bottom:14px;">
@@ -99,8 +130,9 @@
         <th style="width:6%;">No</th>
         <th>Nama</th>
         <th style="width:14%;">Tipe</th>
-        <th style="width:20%;">Warga Negara</th>
-        <th style="width:30%;">Identitas</th>
+        @if($b->moda === 'kereta')<th style="width:18%;">Kursi</th>@endif
+        <th style="width:18%;">Warga Negara</th>
+        <th style="width:28%;">Identitas</th>
       </tr>
     </thead>
     <tbody>
@@ -112,6 +144,7 @@
           @if(!empty($p['birthdate']))<div style="font-size:9px; color:#94a3b8; margin-top:2px;">Lahir: {{ $p['birthdate'] }}</div>@endif
         </td>
         <td style="vertical-align:top;">{{ $p['type'] }}</td>
+        @if($b->moda === 'kereta')<td style="vertical-align:top;"><strong>{{ $p['seat'] ?? '' ?: '—' }}</strong></td>@endif
         <td style="vertical-align:top;">{{ $p['nationality'] ?: '—' }}</td>
         <td style="vertical-align:top;">
           <strong>{{ $p['idLabel'] ?? 'NIK' }}:</strong> {{ $p['id'] ?: '—' }}

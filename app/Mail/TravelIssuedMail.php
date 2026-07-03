@@ -59,6 +59,20 @@ class TravelIssuedMail extends Mailable
         ][$moda] ?? ['label' => 'Travel', 'accent' => '#1d4ed8', 'soft' => '#eff6ff', 'service' => 'Layanan'];
     }
 
+    /** Format satu kursi kereta → "Gerbong {n} · Kursi {kolom}{baris}" (defensif). */
+    public static function formatSeat($s): string
+    {
+        if (!is_array($s)) return trim((string) $s);
+        $col   = $s['column'] ?? $s['seatColumn'] ?? '';
+        $row   = $s['row'] ?? $s['seatRow'] ?? '';
+        $num   = ($col !== '' || $row !== '') ? ($col . $row) : ($s['seatNumber'] ?? $s['seat'] ?? '');
+        $wagon = $s['wagonNumber'] ?? $s['wagon'] ?? '';
+        $parts = [];
+        if ($wagon !== '') $parts[] = 'Gerbong ' . $wagon;
+        if ($num !== '')   $parts[] = 'Kursi ' . $num;
+        return implode(' · ', $parts);
+    }
+
     /** Payload bersama untuk email view + PDF view. */
     public static function payload(TravelBooking $b): array
     {
@@ -105,6 +119,13 @@ class TravelIssuedMail extends Mailable
             }
         } else {
             foreach ($raw as $p) $push($p, 'Penumpang');
+        }
+
+        // Kursi kereta (auto-assign saat book / hasil change_seat) → tempel per penumpang, urut.
+        if ($b->moda === 'kereta') {
+            $seats = $b->meta['book']['seats'] ?? [];
+            foreach ($flat as $i => &$fp) { $fp['seat'] = isset($seats[$i]) ? self::formatSeat($seats[$i]) : ''; }
+            unset($fp);
         }
 
         $statusMap = ['issued' => 'E-Tiket Terbit', 'paid' => 'Lunas', 'pending_payment' => 'Menunggu Pembayaran'];
@@ -168,8 +189,9 @@ class TravelIssuedMail extends Mailable
         $name  = $pax0['name'] ?? trim(($pax0['firstName'] ?? $pax0['first_name'] ?? '') . ' ' . ($pax0['lastName'] ?? $pax0['last_name'] ?? ''));
 
         // Baris produk per leg — tampil HARGA TIKET (tanpa biaya layanan; biaya layanan baris terpisah).
+        // Label produk mengikuti moda (Pesawat/Kereta/Kapal Laut), bukan hardcoded.
         $items = $list->map(fn (TravelBooking $b) => [
-            'product' => 'Tiket Pesawat',
+            'product' => 'Tiket ' . self::modaConfig($b->moda)['label'],
             'desc'    => ($b->service_name ?: $b->airline) . ' (' . $b->origin . ' – ' . $b->destination . ')',
             'sub'     => $b->pax . ' Penumpang' . ($b->vendor_booking_code ? ' · PNR ' . $b->vendor_booking_code : ''),
             'amount'  => 'Rp ' . number_format((int) $b->vendor_price, 0, ',', '.'),

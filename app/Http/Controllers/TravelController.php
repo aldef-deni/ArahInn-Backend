@@ -185,6 +185,18 @@ class TravelController extends Controller
         ], $v['seats']);
 
         $res = $this->travel->changeSeat($v['booking_code'], $v['transaction_id'], $seats);
+
+        // Simpan kursi terpilih ke record lokal (meta.book.seats) → e-tiket PDF
+        // menampilkan nomor kursi terbaru (bukan auto-assign awal).
+        if (\App\Services\TravelService::isSuccess($res['rc'] ?? null)) {
+            $tb = \App\Models\TravelBooking::where('vendor_booking_code', $v['booking_code'])->first();
+            if ($tb) {
+                $meta = $tb->meta ?? [];
+                $meta['book'] = array_merge($meta['book'] ?? [], ['seats' => $seats]);
+                $tb->update(['meta' => $meta]);
+            }
+        }
+
         return $this->respond($res, $res['data'] ?? []);
     }
 

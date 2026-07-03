@@ -64,6 +64,11 @@ class TravelBookingController extends Controller
             'passengers.children.*.birthdate'    => 'required|date_format:Y-m-d',
             'passengers.children.*.id_number'    => 'required|string',
             'passengers.infants'                 => 'nullable|array',
+            // Data pemesan (kontak) — opsional agar klien lama/mobile tak rusak.
+            'contact'          => 'nullable|array',
+            'contact.name'     => 'nullable|string',
+            'contact.email'    => 'nullable|email',
+            'contact.phone'    => 'nullable|string',
         ]);
 
         $adult = (int) $v['adult'];
@@ -141,7 +146,15 @@ class TravelBookingController extends Controller
             'vendor_transaction_id' => $d['transactionId'] ?? null,
             'time_limit'   => $d['timeLimit'] ?? null,
             'passengers'   => $v['passengers'],
-            'meta'         => ['book' => $d],
+            // Simpan kontak pemesan di meta.book.contact → e-tiket dikirim ke email pemesan
+            // (lihat recipientEmail()). Bila tak dikirim (mobile lama), fallback email user.
+            'meta'         => ['book' => !empty($v['contact'])
+                ? array_merge($d, ['contact' => [
+                    'name'  => $v['contact']['name']  ?? '',
+                    'email' => $v['contact']['email'] ?? '',
+                    'phone' => $v['contact']['phone'] ?? '',
+                  ]])
+                : $d],
         ]);
         if ($promo) $promo->increment('used_count');
 
