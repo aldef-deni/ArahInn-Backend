@@ -36,6 +36,15 @@ class User extends Authenticatable
     public function chatRooms()   { return $this->hasMany(ChatRoom::class); }
 
     // ── Helpers ───────────────────────────────────────
+    /**
+     * Akun super-approver: hanya email ini yang boleh menerbitkan/approve tiket
+     * yang batas waktunya (hold vendor) sudah lewat / expired.
+     */
+    public function isExpiredApprover(): bool
+    {
+        return strtolower(trim((string) $this->email)) === 'aldeftech@gmail.com';
+    }
+
     public function getLoyaltyBalance(): int
     {
         return (int) $this->loyaltyPoints()

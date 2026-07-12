@@ -302,7 +302,7 @@ class TravelService
         // Search mem-pool SEMUA maskapai paralel. Pakai timeout PENDEK khusus search:
         // 1 maskapai yang hang TIDAK boleh men-stall seluruh pencarian sampai 45 dtk
         // (bikin FE/proxy timeout → "Gagal mencari penerbangan"). Yang lambat di-drop saja.
-        $searchTimeout = max(8, min($this->timeout, 18));
+        $searchTimeout = max(8, min($this->timeout, 22));
         $responses = Http::pool(fn ($pool) => array_map(
             fn ($a) => $pool->as($a)->connectTimeout(8)->timeout($searchTimeout)->acceptJson()->asJson()
                 ->post($baseUrl . '/flight/search', $payload + ['airline' => $a]),
@@ -705,10 +705,12 @@ class TravelService
     {
         return match ($rc) {
             '00'     => 'Sukses',
+            '10'     => 'Sesi pencarian jadwal kedaluwarsa. Silakan cari jadwal kereta ulang.',
             '33'     => 'Data tidak ditemukan.',
             '01'     => 'Kredensial salah. Hubungi admin.',
             '06'     => 'Saldo deposit tidak cukup. Hubungi admin.',
             '16'     => 'Transaksi gagal. Coba lagi.',
+            '55'     => 'Sistem KAI sedang gangguan. Silakan coba beberapa saat lagi.',
             '68'     => 'Transaksi sedang diproses.',
             'CONFIG' => 'Layanan tiket belum tersedia.',
             'ERR'    => 'Koneksi ke vendor gagal.',

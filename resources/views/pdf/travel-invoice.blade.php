@@ -105,7 +105,7 @@
 
   <table class="totals">
     <tr><td>Subtotal</td><td class="r">{{ $subtotal }}</td></tr>
-    @if(!empty($serviceFee))<tr><td>Biaya Penanganan</td><td class="r">{{ $serviceFee }}</td></tr>@endif
+    @if(!empty($serviceFee))<tr><td>{{ ($moda ?? '') === 'kereta' ? 'Convenience Fee' : 'Biaya Penanganan' }}</td><td class="r">{{ $serviceFee }}</td></tr>@endif
     @if(!empty($adminFee))<tr><td>Biaya Admin</td><td class="r">{{ $adminFee }}</td></tr>@endif
     @if($discount)<tr><td>Diskon Promo</td><td class="r" style="color:#16a34a;">- {{ $discount }}</td></tr>@endif
     <tr class="grand"><td>Total Pembayaran</td><td class="r">{{ $grandTotal }}</td></tr>

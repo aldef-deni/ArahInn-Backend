@@ -348,8 +348,19 @@ class BookingController extends Controller
     public function refund(Request $request, string $id)
     {
         $booking = Booking::with('hotel:id,name,owner_id')->findOrFail($id);
+        $wasCanceled = $booking->status === 'canceled';
         $booking->update(['status' => 'refunded']);
         ActivityLogService::log($request->user()->id, 'REFUND_BOOKING', 'booking', $id, $request);
+
+        // Kembalikan poin loyalitas — hanya bila BELUM dikembalikan lewat cancel()
+        // (booking yang dibatalkan sudah refund poin di BookingService::cancel).
+        if (!$wasCanceled) {
+            $rd = (int) round((float) ($booking->loyalty_discount ?? 0));
+            if ($rd > 0) {
+                try { app(\App\Services\LoyaltyService::class)->refundRedeem($booking->user_id, $rd, 'Pengembalian poin — booking ' . $booking->booking_code); }
+                catch (\Throwable $e) { logger()->error('Refund poin akomodasi (refund) gagal: ' . $e->getMessage()); }
+            }
+        }
 
         // Notif: customer dapat info refund disetujui & ditransfer
         NotificationService::send(

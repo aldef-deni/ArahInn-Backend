@@ -430,6 +430,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reports/bookings',    [ReportController::class, 'bookings']);
         Route::get('/reports/canceled',    [ReportController::class, 'canceled']);
         Route::get('/reports/profit',      [ReportController::class, 'profit']);
+        Route::get('/reports/ppob',        [ReportController::class, 'ppob']);
+        Route::get('/reports/travel',      [ReportController::class, 'travel']);
 
         // Analytics (overview/users/bookings/top-hotels)
         Route::get('/analytics/overview',   [AnalyticsController::class, 'overview']);
@@ -578,6 +580,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/bookings/bulk-delete', [\App\Http\Controllers\TravelBookingController::class, 'adminBulkDestroy']);
         Route::post('/bookings/{id}/issue', [\App\Http\Controllers\TravelBookingController::class, 'adminIssue']);
         Route::post('/bookings/{id}/cancel',[\App\Http\Controllers\TravelBookingController::class, 'adminCancel']);
+        // Pesan ulang otomatis (khusus aldeftech@gmail.com — gate di controller)
+        Route::post('/bookings/{id}/rebook-preview', [\App\Http\Controllers\TravelBookingController::class, 'adminRebookPreview']);
+        Route::post('/bookings/{id}/rebook',[\App\Http\Controllers\TravelBookingController::class, 'adminRebook']);
+        // Cek status vendor & sinkronkan (read-only, TIDAK memotong saldo)
+        Route::post('/bookings/{id}/sync-vendor', [\App\Http\Controllers\TravelBookingController::class, 'adminSyncVendor']);
     });
 
     Route::prefix('admin/ppob')->middleware('role:superadmin|admin|finance')->group(function () {

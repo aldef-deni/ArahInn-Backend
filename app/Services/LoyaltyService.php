@@ -105,15 +105,36 @@ class LoyaltyService
     }
 
     // ── Redeem ────────────────────────────────────────────────────────────
-    public function redeem(int $userId, int $amount, int $bookingId): void
+    // bookingId hanya untuk booking akomodasi (FK ke tabel bookings). Untuk PPOB &
+    // tiket travel biarkan null (tabelnya berbeda) — sumber ditandai lewat description.
+    public function redeem(int $userId, int $amount, ?int $bookingId = null, string $description = 'Poin digunakan untuk pembayaran'): void
     {
         if ($amount <= 0) return;
         LoyaltyPoint::create([
             'user_id'     => $userId,
             'points'      => -$amount,
             'type'        => 'redeem',
-            'description' => 'Poin digunakan untuk pembayaran',
+            'description' => $description,
             'booking_id'  => $bookingId,
+            'created_at'  => now(),
+        ]);
+    }
+
+    /**
+     * Kembalikan poin yang sudah di-redeem (transaksi gagal/batal/kedaluwarsa).
+     * Dicatat type='redeem' positif agar TIDAK dihitung sebagai lifetime earned
+     * (tier tak ikut naik karena pengembalian).
+     */
+    public function refundRedeem(int $userId, int $amount, string $description = 'Pengembalian poin (transaksi gagal)'): void
+    {
+        if ($amount <= 0) return;
+        LoyaltyPoint::create([
+            'user_id'     => $userId,
+            'points'      => $amount,
+            'type'        => 'redeem',
+            'description' => $description,
+            'booking_id'  => null,
+            'expires_at'  => now()->addYear(),
             'created_at'  => now(),
         ]);
     }
@@ -144,7 +165,10 @@ class LoyaltyService
     /** Total poin positif sepanjang waktu (pencapaian, abaikan expiry & redeem). */
     public function getLifetimeEarned(int $userId): int
     {
+        // Hanya type='earn' → pengembalian poin (type='redeem' positif) TIDAK dihitung
+        // sebagai pencapaian, sehingga tier tak menggelembung karena refund.
         return (int) LoyaltyPoint::where('user_id', $userId)
+            ->where('type', 'earn')
             ->where('points', '>', 0)
             ->sum('points');
     }

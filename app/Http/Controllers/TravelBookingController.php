@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\TravelBooking;
 use App\Services\TravelService;
+use App\Services\LoyaltyService;
 use App\Http\Controllers\Admin\SettingController;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -19,7 +21,35 @@ use Illuminate\Support\Facades\Log;
  */
 class TravelBookingController extends Controller
 {
-    public function __construct(private TravelService $travel) {}
+    public function __construct(
+        private TravelService  $travel,
+        private LoyaltyService $loyalty,
+    ) {}
+
+    /**
+     * Hitung poin yang bisa di-redeem untuk booking ini (1 poin = Rp1, tanpa batas
+     * s/d $cap). Hanya menghitung — TIDAK memotong saldo (dipotong via commitRedeem
+     * setelah booking benar-benar dibuat).
+     */
+    private function resolveRedeem(Request $request, float $cap): int
+    {
+        if (!$request->boolean('use_points')) return 0;
+        $requested = max(0, (int) $request->input('points_to_redeem', 0));
+        if ($requested <= 0) return 0;
+        $balance = $this->loyalty->getBalance($request->user()->id);
+        return max(0, min($requested, $balance, (int) floor($cap)));
+    }
+
+    /** Potong saldo poin setelah booking travel terbuat. Loyalty non-kritis: jangan crash. */
+    private function commitRedeem(int $userId, int $amount, string $ref): void
+    {
+        if ($amount <= 0) return;
+        try {
+            $this->loyalty->redeem($userId, $amount, null, 'Poin untuk tiket ' . $ref);
+        } catch (\Throwable $e) {
+            logger()->error('Travel redeem gagal (diabaikan): ' . $e->getMessage(), ['ref' => $ref]);
+        }
+    }
 
     /* ── CHECKOUT (book) ────────────────────────────────────────────── */
 
@@ -80,9 +110,11 @@ class TravelBookingController extends Controller
 
         // Hitung total + validasi promo SEBELUM booking vendor (hindari booking sia-sia)
         $vendorPrice = (int) round(($priceAdult * $adult) + ($priceChild * $child));
-        $markup      = SettingController::computeTravelFee('kereta', $vendorPrice, $payingPax); // total biaya penanganan (0 = tak tampil)
-        $total       = $vendorPrice + $markup;
+        $markup      = SettingController::computeTravelFee('kereta', $vendorPrice, $payingPax); // Convenience Fee (per pax/persen)
+        $adminFee    = SettingController::travelAdminFee('kereta');                              // Biaya Penanganan (flat per order)
+        $total       = $vendorPrice + $markup + $adminFee;
         [$promo, $promoDiscount] = $this->resolveTravelPromo($request->input('promo_code'), 'kereta', (float) $total, $v['date']);
+        $loyaltyDiscount = $this->resolveRedeem($request, (float) ($total - $promoDiscount));
 
         $res = $this->travel->bookTrain([
             'origin'           => strtoupper($v['origin']),
@@ -139,12 +171,16 @@ class TravelBookingController extends Controller
             'pax'          => $payingPax,
             'vendor_price' => $vendorPrice,
             'markup'       => $markup,
-            'total_price'  => $total - $promoDiscount,
+            'admin_fee'    => $adminFee,
+            'total_price'  => $total - $promoDiscount - $loyaltyDiscount,
             'promo_id'       => $promo?->id,
             'promo_discount' => $promoDiscount,
+            'loyalty_discount' => $loyaltyDiscount,
             'vendor_booking_code'   => $d['bookingCode'] ?? null,
             'vendor_transaction_id' => $d['transactionId'] ?? null,
-            'time_limit'   => $d['timeLimit'] ?? null,
+            // Batas bayar mengikuti skema ArahInn (≤3 jam sblm berangkat = 15 mnt, >3 jam = 60 mnt),
+            // dibatasi timeLimit vendor & jadwal keberangkatan.
+            'time_limit'   => $this->trainPayDeadline($v['date'], $v['departure_time'], $d['timeLimit'] ?? null),
             'passengers'   => $v['passengers'],
             // Simpan kontak pemesan di meta.book.contact → e-tiket dikirim ke email pemesan
             // (lihat recipientEmail()). Bila tak dikirim (mobile lama), fallback email user.
@@ -157,6 +193,7 @@ class TravelBookingController extends Controller
                 : $d],
         ]);
         if ($promo) $promo->increment('used_count');
+        $this->commitRedeem($request->user()->id, $loyaltyDiscount, $booking->code);
 
         return response()->json(['success' => true, 'data' => $booking], 201);
     }
@@ -202,6 +239,7 @@ class TravelBookingController extends Controller
         $markup      = SettingController::computeTravelFee('pesawat', $vendorPrice, $payingPax); // total biaya penanganan (0 = tak tampil)
         $total       = $vendorPrice + $markup;
         [$promo, $promoDiscount] = $this->resolveTravelPromo($request->input('promo_code'), 'pesawat', (float) $total, $v['departure_date']);
+        $loyaltyDiscount = $this->resolveRedeem($request, (float) ($total - $promoDiscount));
 
         // WNI → idNumber = NIK; WNA → idNumber jatuh ke nomor paspor (identitas yang dipakai vendor)
         $mapPax = fn($p) => [
@@ -248,9 +286,10 @@ class TravelBookingController extends Controller
             'pax'          => $payingPax,
             'vendor_price' => $vendorPrice,
             'markup'       => $markup,
-            'total_price'  => $total - $promoDiscount,
+            'total_price'  => $total - $promoDiscount - $loyaltyDiscount,
             'promo_id'       => $promo?->id,
             'promo_discount' => $promoDiscount,
+            'loyalty_discount' => $loyaltyDiscount,
             'vendor_booking_code'   => $d['bookingCode'] ?? null,
             'vendor_transaction_id' => $d['transactionId'] ?? null,
             'time_limit'   => $d['timeLimitYMD'] ?? null,
@@ -258,6 +297,7 @@ class TravelBookingController extends Controller
             'meta'         => ['book' => $d, 'paymentCode' => $d['paymentCode'] ?? ''],
         ]);
         if ($promo) $promo->increment('used_count');
+        $this->commitRedeem($request->user()->id, $loyaltyDiscount, $booking->code);
 
         return response()->json(['success' => true, 'data' => $booking], 201);
     }
@@ -388,20 +428,30 @@ class TravelBookingController extends Controller
         // Total gabungan + promo atas total gabungan
         $combined = $out['legTotal'] + $ret['legTotal'];
         [$promo, $promoDiscount] = $this->resolveTravelPromo($request->input('promo_code'), 'pesawat', (float) $combined, $v['outbound']['departure_date']);
+        $loyaltyDiscount = $this->resolveRedeem($request, (float) ($combined - $promoDiscount));
 
         $group = 'TRVG' . now()->format('ymd') . strtoupper(substr(uniqid(), -5));
 
-        // Diskon dibebankan ke leg pergi (representatif). Total order = jumlah kedua leg.
+        // Promo dibebankan ke leg pergi. Loyalty disebar: leg pergi dulu, sisanya ke leg
+        // pulang (agar total order = jumlah kedua leg terpotong penuh, tak ada sisa hilang).
+        $departAfterPromo = max(0, $out['legTotal'] - (int) round($promoDiscount));
+        $departLoyalty    = min($loyaltyDiscount, $departAfterPromo);
+        $returnLoyalty    = $loyaltyDiscount - $departLoyalty;
+
         $bDepart = $this->createRecord($request, array_merge($out['attrs'], [
             'group_code'     => $group, 'leg' => 'depart',
-            'total_price'    => max(0, $out['legTotal'] - (int) round($promoDiscount)),
+            'total_price'    => $departAfterPromo - $departLoyalty,
             'promo_id'       => $promo?->id,
             'promo_discount' => $promoDiscount,
+            'loyalty_discount' => $departLoyalty,
         ]));
         $bReturn = $this->createRecord($request, array_merge($ret['attrs'], [
             'group_code' => $group, 'leg' => 'return',
+            'total_price'      => max(0, $ret['legTotal'] - $returnLoyalty),
+            'loyalty_discount' => $returnLoyalty,
         ]));
         if ($promo) $promo->increment('used_count');
+        $this->commitRedeem($request->user()->id, $loyaltyDiscount, $group);
 
         return response()->json([
             'success' => true,
@@ -458,6 +508,7 @@ class TravelBookingController extends Controller
         $total       = $vendorPrice + $markup + $adminFee;
         $departYmd   = substr($v['departure_date'], 0, 4) . '-' . substr($v['departure_date'], 4, 2) . '-' . substr($v['departure_date'], 6, 2);
         [$promo, $promoDiscount] = $this->resolveTravelPromo($request->input('promo_code'), 'pelni', (float) $total, $departYmd);
+        $loyaltyDiscount = $this->resolveRedeem($request, (float) ($total - $promoDiscount));
 
         $mapPax = fn($p) => [
             'name' => $p['name'], 'birthDate' => $p['birth_date'],
@@ -510,15 +561,17 @@ class TravelBookingController extends Controller
             'vendor_price' => $vendorPrice,
             'markup'       => $markup,
             'admin_fee'    => $adminFee,
-            'total_price'  => $total - $promoDiscount,
+            'total_price'  => $total - $promoDiscount - $loyaltyDiscount,
             'promo_id'       => $promo?->id,
             'promo_discount' => $promoDiscount,
+            'loyalty_discount' => $loyaltyDiscount,
             'vendor_transaction_id' => $d['transactionId'] ?? null,
             'time_limit'   => $d['payLimit'] ?? null,
             'passengers'   => $v['passengers'],
             'meta'         => ['book' => $d, 'paymentCode' => $d['paymentCode'] ?? ''],
         ]);
         if ($promo) $promo->increment('used_count');
+        $this->commitRedeem($request->user()->id, $loyaltyDiscount, $booking->code);
 
         return response()->json(['success' => true, 'data' => $booking], 201);
     }
@@ -651,6 +704,14 @@ class TravelBookingController extends Controller
         $booking = TravelBooking::findOrFail($id);
         $simulate = $request->boolean('simulate', false); // admin verifikasi → terbit riil
 
+        // Akun super-approver (aldeftech@gmail.com): boleh menerbitkan tiket yang batas
+        // hold vendornya sudah lewat / status expired. Tetap COBA terbit ke vendor —
+        // kalau vendor menolak (hold hilang), gagal wajar (tak ada tiket palsu).
+        $canExpired = $request->user()->isExpiredApprover();
+        $allowedStatuses = $canExpired
+            ? ['pending_payment', 'paid', 'expired']
+            : ['pending_payment', 'paid'];
+
         // Pulang-pergi: terbitkan SEMUA leg dalam group sekaligus (1 klik → 2 e-tiket).
         if ($booking->group_code) {
             $legs = TravelBooking::with('user:id,name,email')
@@ -666,9 +727,9 @@ class TravelBookingController extends Controller
             $blocked = [];
             foreach ($legs as $leg) {
                 if ($leg->status === 'issued') continue;
-                if (!in_array($leg->status, ['pending_payment', 'paid'], true)) {
+                if (!in_array($leg->status, $allowedStatuses, true)) {
                     $blocked[] = ['code' => $leg->code, 'leg' => $leg->leg, 'reason' => 'status ' . $leg->status . ' tidak bisa diterbitkan'];
-                } elseif (!$simulate && $this->holdExpired($leg)) {
+                } elseif (!$simulate && !$canExpired && $this->holdExpired($leg)) {
                     $blocked[] = ['code' => $leg->code, 'leg' => $leg->leg, 'reason' => 'batas waktu hold vendor sudah lewat'];
                 }
             }
@@ -687,8 +748,8 @@ class TravelBookingController extends Controller
                     $results[] = ['code' => $leg->code, 'leg' => $leg->leg, 'ok' => true, 'message' => 'sudah terbit'];
                     continue;
                 }
-                if (!in_array($leg->status, ['pending_payment', 'paid'], true)
-                    || (!$simulate && $this->holdExpired($leg))) {
+                if (!in_array($leg->status, $allowedStatuses, true)
+                    || (!$simulate && !$canExpired && $this->holdExpired($leg))) {
                     $results[] = ['code' => $leg->code, 'leg' => $leg->leg, 'ok' => false, 'message' => 'tidak layak diterbitkan'];
                     continue;
                 }
@@ -730,7 +791,7 @@ class TravelBookingController extends Controller
         if ($booking->status === 'issued') {
             return response()->json(['success' => true, 'data' => $booking, 'message' => 'Tiket sudah terbit.']);
         }
-        if (!in_array($booking->status, ['pending_payment', 'paid'])) {
+        if (!in_array($booking->status, $allowedStatuses)) {
             return response()->json(['success' => false, 'message' => 'Status pesanan tidak bisa diterbitkan.'], 422);
         }
 
@@ -775,11 +836,406 @@ class TravelBookingController extends Controller
             ]),
         ]);
 
+        // Kembalikan poin loyalitas yang dipakai. Roundtrip = 1 order 2 leg (group);
+        // batalkan sekaligus & kembalikan poin dari kedua leg.
+        $legs = $booking->group_code
+            ? TravelBooking::where('group_code', $booking->group_code)->get()
+            : collect([$booking]);
+        foreach ($legs as $leg) {
+            if ($leg->group_code && $leg->id !== $booking->id && $leg->status !== 'canceled') {
+                $leg->update(['status' => 'canceled']);
+            }
+            $rd = (int) round((float) $leg->loyalty_discount);
+            if ($rd > 0) {
+                try { $this->loyalty->refundRedeem($leg->user_id, $rd, 'Pengembalian poin — tiket ' . $leg->code); }
+                catch (\Throwable $e) { logger()->error('Refund poin travel gagal: ' . $e->getMessage(), ['code' => $leg->code]); }
+            }
+        }
+
         return response()->json([
             'success' => true,
             'data'    => $booking->fresh(),
             'message' => 'Pesanan travel dibatalkan.',
         ]);
+    }
+
+    /* ═══════════════════ PESAN ULANG OTOMATIS (khusus aldeftech@gmail.com) ═══════════════════
+     | Untuk tiket pesawat yang hold vendornya hangus. Alur 2 langkah:
+     |  1. PREVIEW  → search jadwal terkini + cocokkan flightCode ASLI → tampil perbandingan
+     |     data lama (customer/expired) vs data baru (jadwal & harga terkini). Belum book.
+     |  2. CONFIRM  → book ulang ke vendor → buat booking BARU atas customer asli → terbitkan
+     |     e-tiket langsung. Customer tak perlu melakukan apa pun.
+     | Harga vendor dinamis → dipakai harga terkini (bisa beda). Kalau penerbangan yang sama
+     | sudah tak tersedia → GAGAL (tidak diam-diam menukar ke penerbangan/jam lain).
+     ─────────────────────────────────────────────────────────────────────────────────────── */
+
+    /** Guard umum pesan ulang; kembalikan JsonResponse bila tak layak, atau null bila lolos. */
+    private function rebookGuard(Request $request, TravelBooking $old)
+    {
+        if (!$request->user()->isExpiredApprover()) {
+            return response()->json(['success' => false, 'message' => 'Hanya akun tertentu yang boleh pesan ulang otomatis.'], 403);
+        }
+        if ($old->moda !== 'pesawat') {
+            return response()->json(['success' => false, 'message' => 'Pesan ulang otomatis baru tersedia untuk tiket pesawat.'], 422);
+        }
+        if ($old->status === 'issued') {
+            return response()->json(['success' => false, 'message' => 'Tiket sudah terbit, tidak perlu pesan ulang.'], 422);
+        }
+        return null;
+    }
+
+    /** Konteks pax/rute/tanggal dari booking lama. */
+    private function rebookContext(TravelBooking $old): array
+    {
+        $pax = $old->passengers ?? [];
+        $adultsIn = $pax['adults'] ?? [];
+        $childIn  = $pax['children'] ?? [];
+        $infIn    = $pax['infants'] ?? [];
+        $adult = max(1, count($adultsIn));
+        $child = count($childIn);
+        $infant = count($infIn);
+        return [
+            'adultsIn' => $adultsIn, 'childIn' => $childIn, 'infIn' => $infIn,
+            'adult' => $adult, 'child' => $child, 'infant' => $infant,
+            'payingPax' => $adult + $child,
+            'depart' => strtoupper((string) $old->origin),
+            'arrive' => strtoupper((string) $old->destination),
+            'date'   => \Illuminate\Support\Carbon::parse($old->depart_date)->format('Y-m-d'),
+        ];
+    }
+
+    /** Search jadwal terkini + cocokkan flightCode ASLI. */
+    private function resolveRebookFlight(TravelBooking $old, array $ctx): array
+    {
+        $search = $this->travel->searchAllFlights([
+            'departure' => $ctx['depart'], 'arrival' => $ctx['arrive'], 'departureDate' => $ctx['date'],
+            'adult' => $ctx['adult'], 'child' => $ctx['child'], 'infant' => $ctx['infant'],
+        ]);
+        $flights = $search['flights'] ?? [];
+        if (empty($flights)) {
+            return ['ok' => false, 'message' => 'Tidak ada penerbangan tersedia untuk rute/tanggal ini. Silakan proses manual.'];
+        }
+        $match = null; $cls = [];
+        foreach ($flights as $fl) {
+            $c  = $fl['classes'][0][0] ?? [];
+            $fc = $c['flightCode'] ?? $c['flightCode1'] ?? '';
+            if ($old->service_name && strcasecmp((string) $fc, (string) $old->service_name) === 0) {
+                $match = $fl; $cls = $c; break;
+            }
+        }
+        if (!$match) {
+            return ['ok' => false, 'message' => "Penerbangan {$old->service_name} sudah tidak tersedia pada tanggal ini. Silakan cari & pesan manual dengan jadwal lain."];
+        }
+        if (empty($cls['seat'])) {
+            return ['ok' => false, 'message' => 'Gagal mengambil data kursi penerbangan terkini.'];
+        }
+        return [
+            'ok'          => true,
+            'airline'     => $match['airline'],
+            'airlineName' => $match['airlineName'] ?? $match['airline'],
+            'seat'        => $cls['seat'],
+            'unitPrice'   => (int) round((float) ($cls['price'] ?? 0)),
+            'flightCode'  => $cls['flightCode'] ?? $old->service_name,
+            'class'       => $cls['class'] ?? $old->class,
+            'departureTime' => $cls['departureTime'] ?? null,
+            'arrivalTime'   => $cls['arrivalTime'] ?? null,
+        ];
+    }
+
+    /** Daftar nama penumpang untuk pratinjau. */
+    private function rebookPassengerNames(array $pax): array
+    {
+        $nameOf = fn($p) => trim(($p['first_name'] ?? $p['firstName'] ?? $p['name'] ?? '') . ' ' . ($p['last_name'] ?? $p['lastName'] ?? ''));
+        $idOf   = fn($p) => $p['id_number'] ?? $p['idNumber'] ?? $p['passport_number'] ?? $p['passportNumber'] ?? '';
+        $out = [];
+        foreach (($pax['adults'] ?? []) as $p)   $out[] = ['name' => $nameOf($p), 'id' => $idOf($p), 'type' => 'Dewasa'];
+        foreach (($pax['children'] ?? []) as $p) $out[] = ['name' => $nameOf($p), 'id' => $idOf($p), 'type' => 'Anak'];
+        foreach (($pax['infants'] ?? []) as $p)  $out[] = ['name' => $nameOf($p), 'id' => $idOf($p), 'type' => 'Bayi'];
+        return $out;
+    }
+
+    /**
+     * PRATINJAU pesan ulang — data lama vs jadwal/harga terkini (belum book).
+     * POST /admin/travel/bookings/{id}/rebook-preview
+     */
+    public function adminRebookPreview(Request $request, string $id)
+    {
+        $old = TravelBooking::findOrFail($id);
+        if ($resp = $this->rebookGuard($request, $old)) return $resp;
+
+        $ctx = $this->rebookContext($old);
+        $r   = $this->resolveRebookFlight($old, $ctx);
+        if (!($r['ok'] ?? false)) {
+            return response()->json(['success' => false, 'message' => $r['message']], 422);
+        }
+
+        // Simpan hasil match agar konfirmasi tak perlu search ulang (token kursi berumur pendek).
+        Cache::put("rebook:{$old->id}", ['ctx' => $ctx, 'flight' => $r], 180);
+
+        $vendorPrice = (int) round($r['unitPrice'] * $ctx['payingPax']);
+        $markup      = SettingController::computeTravelFee('pesawat', $vendorPrice, $ctx['payingPax']);
+        $newTotal    = $vendorPrice + $markup;
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'old' => [
+                    'code'             => $old->code,
+                    'airline'          => TravelService::resolveCarrier($old->service_name, (string) $old->airline)['name'] ?? $old->airline,
+                    'origin'           => $ctx['depart'], 'destination' => $ctx['arrive'],
+                    'origin_name'      => $old->origin_name, 'destination_name' => $old->destination_name,
+                    'flight_code'      => $old->service_name,
+                    'date'             => $ctx['date'],
+                    'depart_time'      => $old->depart_time, 'arrive_time' => $old->arrive_time,
+                    'class'            => $old->class,
+                    'pax'              => $ctx['payingPax'],
+                    'total_price'      => (float) $old->total_price,
+                    'created_at'       => $old->created_at,
+                ],
+                'new' => [
+                    'flight_code'      => $r['flightCode'],
+                    'airline'          => $r['airlineName'],
+                    'date'             => $ctx['date'],
+                    'depart_time'      => $r['departureTime'], 'arrive_time' => $r['arrivalTime'],
+                    'class'            => $r['class'],
+                    'unit_price'       => $r['unitPrice'],
+                    'vendor_price'     => $vendorPrice,
+                    'markup'           => $markup,
+                    'total_price'      => $newTotal,
+                ],
+                'passengers' => $this->rebookPassengerNames($old->passengers ?? []),
+                // Email tujuan e-tiket & voucher (sama seperti recipientEmail()).
+                'recipient_email' => data_get($old->meta, 'payment.contact.email')
+                    ?? data_get($old->meta, 'book.contact.email')
+                    ?? $old->user?->email,
+                'customer_name'   => data_get($old->meta, 'book.contact.name') ?? $old->user?->name,
+                'price_diff' => $newTotal - (float) $old->total_price,
+                'expires_in' => 180,
+            ],
+        ]);
+    }
+
+    /**
+     * KONFIRMASI pesan ulang — book + buat booking baru + terbitkan e-tiket.
+     * Memakai hasil PREVIEW (cache) bila ada agar tak search 2×; fallback search ulang.
+     * POST /admin/travel/bookings/{id}/rebook
+     */
+    public function adminRebook(Request $request, string $id)
+    {
+        $old = TravelBooking::findOrFail($id);
+        if ($resp = $this->rebookGuard($request, $old)) return $resp;
+
+        $cached = Cache::pull("rebook:{$old->id}");
+        $ctx = $cached['ctx'] ?? $this->rebookContext($old);
+        $r   = $cached['flight'] ?? $this->resolveRebookFlight($old, $ctx);
+        if (!($r['ok'] ?? false)) {
+            return response()->json(['success' => false, 'message' => $r['message'] ?? 'Gagal menyiapkan pesan ulang.'], 422);
+        }
+
+        // Map penumpang tersimpan (snake/camel) → shape vendor
+        $mapPax = fn($p) => [
+            'title'                  => $p['title'] ?? 'MR',
+            'firstName'              => $p['first_name'] ?? $p['firstName'] ?? '',
+            'lastName'               => $p['last_name'] ?? $p['lastName'] ?? '',
+            'birthdate'              => $p['birthdate'] ?? '',
+            'idNumber'               => ($p['id_number'] ?? $p['idNumber'] ?? '') ?: ($p['passport_number'] ?? $p['passportNumber'] ?? ''),
+            'phone'                  => $p['phone'] ?? '',
+            'email'                  => $p['email'] ?? '',
+            'nationality'            => $p['nationality'] ?? 'ID',
+            'passportNumber'         => $p['passport_number'] ?? $p['passportNumber'] ?? '',
+            'passportIssueDate'      => $p['passport_issue_date'] ?? $p['passportIssueDate'] ?? '',
+            'passportIssuingCountry' => $p['passport_issuing_country'] ?? $p['passportIssuingCountry'] ?? '',
+            'passportExpiry'         => $p['passport_expiry'] ?? $p['passportExpiry'] ?? '',
+        ];
+
+        // Book ulang ke vendor (hold baru)
+        $res = $this->travel->bookFlight([
+            'airline' => $r['airline'], 'departure' => $ctx['depart'], 'arrival' => $ctx['arrive'],
+            'departureDate' => $ctx['date'], 'returnDate' => '',
+            'adult' => $ctx['adult'], 'child' => $ctx['child'], 'infant' => $ctx['infant'],
+            'flights' => [$r['seat']],
+            'passengers' => [
+                'adults'   => array_map($mapPax, $ctx['adultsIn']),
+                'children' => array_map($mapPax, $ctx['childIn']),
+                'infants'  => array_map($mapPax, $ctx['infIn']),
+            ],
+        ]);
+        if (!TravelService::isSuccess($res['rc'] ?? null)) {
+            return response()->json(['success' => false, 'message' => 'Gagal booking ulang ke vendor: ' . ($res['rd'] ?? TravelService::userMessage($res['rc'] ?? null))], 422);
+        }
+        $d = $res['data'] ?? [];
+
+        // Buat record BARU atas customer ASLI (harga terkini)
+        $vendorPrice = (int) round($r['unitPrice'] * $ctx['payingPax']);
+        $markup      = SettingController::computeTravelFee('pesawat', $vendorPrice, $ctx['payingPax']);
+        $total       = $vendorPrice + $markup;
+
+        $new = TravelBooking::create([
+            'user_id'      => $old->user_id,
+            'code'         => TravelBooking::generateCode(),
+            'status'       => 'paid',
+            'moda'         => 'pesawat',
+            'airline'      => $r['airline'],
+            'origin'       => $ctx['depart'], 'destination' => $ctx['arrive'],
+            'origin_name'  => $old->origin_name, 'destination_name' => $old->destination_name,
+            'depart_date'  => $ctx['date'],
+            'depart_time'  => $r['departureTime'] ?? $old->depart_time,
+            'arrive_time'  => $r['arrivalTime'] ?? $old->arrive_time,
+            'service_name' => $r['flightCode'] ?? $old->service_name,
+            'class'        => $r['class'] ?? $old->class,
+            'pax'          => $ctx['payingPax'],
+            'vendor_price' => $vendorPrice,
+            'markup'       => $markup,
+            'total_price'  => $total,
+            'vendor_booking_code'   => $d['bookingCode'] ?? null,
+            'vendor_transaction_id' => $d['transactionId'] ?? null,
+            'time_limit'   => $d['timeLimitYMD'] ?? null,
+            'passengers'   => $old->passengers,
+            'meta'         => [
+                'book'       => array_merge($d, ['contact' => data_get($old->meta, 'book.contact')]),
+                'paymentCode'=> $d['paymentCode'] ?? '',
+                'rebook_of'  => $old->code,
+            ],
+        ]);
+
+        $issue = $this->issueBooking($new, false);
+
+        $old->update([
+            'status' => 'canceled',
+            'meta'   => array_merge($old->meta ?? [], [
+                'rebooked_to' => $new->code,
+                'rebook_by'   => $request->user()->id,
+                'rebook_at'   => now()->toIso8601String(),
+            ]),
+        ]);
+
+        if (!($issue['ok'] ?? false)) {
+            return response()->json([
+                'success' => false,
+                'data'    => $new->fresh(),
+                'message' => "Booking ulang berhasil (kode {$new->code}) TAPI penerbitan e-tiket gagal: " . ($issue['message'] ?? '-') . '. Terbitkan manual dari daftar (status: Dibayar).',
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data'    => $new->fresh(),
+            'message' => "Pesan ulang berhasil & e-tiket diterbitkan (kode {$new->code}). Booking lama {$old->code} ditandai dibatalkan.",
+        ]);
+    }
+
+    /**
+     * CEK STATUS VENDOR & SINKRONKAN (khusus aldeftech@gmail.com) — untuk kasus saldo
+     * sudah terpotong tapi status kita masih 'paid' (respons issue gagal/timeout).
+     * HANYA membaca status ke vendor via /flight/booking_info (TIDAK memanggil
+     * /flight/payment → TIDAK ada risiko potong saldo lagi). Bila vendor mengonfirmasi
+     * tiket sudah terbit & ada URL e-tiket → tandai 'issued' + kirim e-tiket. Bila tak
+     * bisa dipastikan → tidak mengubah apa pun, tampilkan status mentah untuk dicek admin.
+     * POST /admin/travel/bookings/{id}/sync-vendor
+     */
+    public function adminSyncVendor(Request $request, string $id)
+    {
+        if (!$request->user()->isExpiredApprover()) {
+            return response()->json(['success' => false, 'message' => 'Hanya akun tertentu yang boleh sinkronisasi vendor.'], 403);
+        }
+        $booking = TravelBooking::findOrFail($id);
+        if ($booking->moda !== 'pesawat') {
+            return response()->json(['success' => false, 'message' => 'Sinkronisasi vendor baru tersedia untuk tiket pesawat.'], 422);
+        }
+        if ($booking->status === 'issued') {
+            return response()->json(['success' => true, 'synced' => false, 'message' => 'Tiket sudah berstatus TERBIT di sistem.', 'data' => ['url_etiket' => $booking->url_etiket]]);
+        }
+        if (!$booking->vendor_transaction_id) {
+            return response()->json(['success' => false, 'message' => 'transactionId vendor tidak tersimpan — tidak bisa cek. Cek manual di panel Rajabiller.'], 422);
+        }
+
+        // CEK STATUS SAJA (tidak memotong saldo)
+        $info = $this->travel->flightBookingInfo(
+            (string) $booking->airline,
+            (string) $booking->origin,
+            (string) $booking->destination,
+            (string) $booking->vendor_transaction_id
+        );
+        $rc   = $info['rc'] ?? null;
+        $raw  = $info['rd'] ?? ($info['message'] ?? '');
+        $blob = json_encode($info, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        // Cari URL e-tiket (utamakan yang mengandung etiket/eticket/.pdf, fallback URL apa pun)
+        $urlEtiket = null;
+        if (preg_match('#https?://[^\s"\\\\,;|]*(?:etiket|eticket|ticket|\.pdf)[^\s"\\\\,;|]*#i', (string) $blob, $m)) {
+            $urlEtiket = $m[0];
+        } elseif (preg_match('#https?://[^\s"\\\\,;|]+#i', (string) $blob, $m)) {
+            $urlEtiket = $m[0];
+        }
+        $looksIssued = TravelService::isSuccess($rc)
+            && ($urlEtiket || preg_match('/issued|ticketed|lunas|terbit|berhasil|success|paid/i', (string) $blob));
+
+        // Hanya sinkron bila yakin terbit DAN dapat URL e-tiket (agar customer benar dapat tiket).
+        if ($looksIssued && $urlEtiket) {
+            $booking->update([
+                'status'     => 'issued',
+                'paid_at'    => $booking->paid_at ?? now(),
+                'issued_at'  => now(),
+                'url_etiket' => $urlEtiket,
+                'meta'       => array_merge($booking->meta ?? [], [
+                    'vendor_sync' => $info,
+                    'synced_by'   => $request->user()->id,
+                    'synced_at'   => now()->toIso8601String(),
+                ]),
+            ]);
+            try { $this->sendEtiketEmail($booking->fresh(), $booking->user); } catch (\Throwable $e) { /* email non-kritis */ }
+
+            return response()->json([
+                'success' => true,
+                'synced'  => true,
+                'data'    => ['url_etiket' => $urlEtiket, 'rc' => $rc],
+                'message' => "Vendor mengonfirmasi tiket SUDAH TERBIT. Status disinkronkan ke 'Terbit' & e-tiket dikirim ke email customer. TIDAK ada pemotongan saldo.",
+            ]);
+        }
+
+        // Tak bisa dipastikan → jangan ubah apa pun.
+        return response()->json([
+            'success' => false,
+            'synced'  => false,
+            'data'    => ['rc' => $rc, 'raw' => is_string($raw) ? $raw : json_encode($raw), 'detected_url' => $urlEtiket],
+            'message' => 'Belum bisa dipastikan terbit dari cek vendor ini' . ($rc ? " (rc: {$rc})" : '') . '. JANGAN klik Terbitkan (risiko potong saldo lagi). Cek manual di panel Rajabiller pakai transactionId, lalu kabari.',
+        ], 422);
+    }
+
+    /**
+     * Batas waktu bayar tiket kereta (skema ArahInn):
+     *   ≤ 3 jam sebelum berangkat  → hitung mundur 15 menit
+     *   > 3 jam sebelum berangkat  → hitung mundur maks 60 menit
+     * Selalu dibatasi jadwal keberangkatan & timeLimit vendor (yang lebih awal yang menang).
+     */
+    private function trainPayDeadline(string $departDate, ?string $departTime, ?string $vendorTimeLimit): ?string
+    {
+        try {
+            $now    = now();
+            $digits = preg_replace('/\D/', '', (string) $departTime);      // "06:00" → "0600"
+            $digits = str_pad($digits !== '' ? $digits : '0000', 4, '0', STR_PAD_LEFT);
+            $departure = \Carbon\Carbon::parse($departDate)
+                ->setTime((int) substr($digits, 0, 2), (int) substr($digits, 2, 2), 0);
+
+            $minutesToDep = $now->diffInMinutes($departure, false);        // signed: + bila di masa depan
+            $window       = ($minutesToDep <= 180) ? 15 : 60;             // menit
+            $deadline     = $now->copy()->addMinutes($window);
+
+            // Tidak boleh melewati jadwal berangkat.
+            if ($deadline->gt($departure)) $deadline = $departure->copy();
+
+            // Tidak boleh melewati batas vendor (KAI membatalkan booking di timeLimit).
+            if ($vendorTimeLimit) {
+                try {
+                    $vt = \Carbon\Carbon::parse($vendorTimeLimit);
+                    if ($vt->gt($now) && $vt->lt($deadline)) $deadline = $vt;
+                } catch (\Throwable $e) { /* abaikan parse gagal */ }
+            }
+
+            return $deadline->format('Y-m-d H:i:s');
+        } catch (\Throwable $e) {
+            return $vendorTimeLimit;   // fallback ke nilai vendor
+        }
     }
 
     /**

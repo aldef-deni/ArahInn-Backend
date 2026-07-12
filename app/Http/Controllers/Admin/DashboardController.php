@@ -85,6 +85,65 @@ class DashboardController extends Controller
             ->groupBy('status')
             ->pluck('count', 'status');
 
+        // ── PPOB (transaksi berhasil) ───────────────────────────────────────
+        $ppobBase = fn() => DB::table('ppob_transactions')->where('status', 'success');
+        $ppobOmzet       = (float) $ppobBase()->sum('total_amount');
+        $ppobProfit      = (float) $ppobBase()->sum(DB::raw('price_sell - price_buy'));
+        $ppobCount       = (int)   $ppobBase()->count();
+        $ppobOmzetMonth  = (float) $ppobBase()->where('created_at', '>=', $thisMonthStart)->sum('total_amount');
+        $ppobProfitMonth = (float) $ppobBase()->where('created_at', '>=', $thisMonthStart)->sum(DB::raw('price_sell - price_buy'));
+        $ppobCountMonth  = (int)   $ppobBase()->where('created_at', '>=', $thisMonthStart)->count();
+        $ppobOmzetLast   = (float) $ppobBase()->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->sum('total_amount');
+
+        // ── Tiket Travel (e-tiket terbit) ───────────────────────────────────
+        $travelBase = fn() => DB::table('travel_bookings')->where('status', 'issued');
+        $travelOmzet       = (float) $travelBase()->sum('total_price');
+        $travelProfit      = (float) $travelBase()->sum('markup');   // biaya layanan = laba travel
+        $travelCount       = (int)   $travelBase()->count();
+        $travelOmzetMonth  = (float) $travelBase()->where('created_at', '>=', $thisMonthStart)->sum('total_price');
+        $travelProfitMonth = (float) $travelBase()->where('created_at', '>=', $thisMonthStart)->sum('markup');
+        $travelCountMonth  = (int)   $travelBase()->where('created_at', '>=', $thisMonthStart)->count();
+        $travelOmzetLast   = (float) $travelBase()->whereBetween('created_at', [$lastMonthStart, $lastMonthEnd])->sum('total_price');
+
+        // ── Akomodasi (jumlah pesanan yang terbayar/terbit) ─────────────────
+        $akoCount      = (int) Booking::whereIn('status', ['paid', 'issued'])->count();
+        $akoCountMonth = (int) Booking::whereIn('status', ['paid', 'issued'])->where('created_at', '>=', $thisMonthStart)->count();
+
+        // ── Total semua channel ─────────────────────────────────────────────
+        $totalOmzetAll       = (float) $totalRevenue + $ppobOmzet + $travelOmzet;
+        $totalOmzetAllMonth  = (float) $revenueThisMonth + $ppobOmzetMonth + $travelOmzetMonth;
+        $totalOmzetAllLast   = (float) $revenueLastMonth + $ppobOmzetLast + $travelOmzetLast;
+        $totalProfitAll      = round($commissionRevenue + $ppobProfit + $travelProfit, 2);
+        $totalProfitAllMonth = round($commissionThisMonth + $ppobProfitMonth + $travelProfitMonth, 2);
+        $totalCountAll       = $akoCount + $ppobCount + $travelCount;
+        $totalCountAllMonth  = $akoCountMonth + $ppobCountMonth + $travelCountMonth;
+
+        // ── Tren omzet 6 bulan per channel (untuk stacked area chart) ───────
+        $since = now()->copy()->subMonths(5)->startOfMonth();
+        $akoMonthly = DB::table('payments')->where('status', 'settlement')
+            ->where(DB::raw($payDate), '>=', $since)
+            ->select(DB::raw("DATE_FORMAT(COALESCE(payments.paid_at, payments.created_at), '%Y-%m') as m"), DB::raw('SUM(amount) as v'))
+            ->groupBy('m')->pluck('v', 'm');
+        $ppobMonthly = DB::table('ppob_transactions')->where('status', 'success')
+            ->where('created_at', '>=', $since)
+            ->select(DB::raw("DATE_FORMAT(created_at, '%Y-%m') as m"), DB::raw('SUM(total_amount) as v'))
+            ->groupBy('m')->pluck('v', 'm');
+        $travelMonthly = DB::table('travel_bookings')->where('status', 'issued')
+            ->where('created_at', '>=', $since)
+            ->select(DB::raw("DATE_FORMAT(created_at, '%Y-%m') as m"), DB::raw('SUM(total_price) as v'))
+            ->groupBy('m')->pluck('v', 'm');
+
+        $monthlyByChannel = [];
+        foreach (range(5, 0) as $i) {
+            $key = now()->copy()->subMonths($i)->format('Y-m');
+            $monthlyByChannel[] = [
+                'month'     => $key,
+                'akomodasi' => (float) ($akoMonthly[$key] ?? 0),
+                'ppob'      => (float) ($ppobMonthly[$key] ?? 0),
+                'travel'    => (float) ($travelMonthly[$key] ?? 0),
+            ];
+        }
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -110,6 +169,46 @@ class DashboardController extends Controller
                 ],
                 'recent_bookings' => $recentBookings,
                 'bookings_by_status' => $byStatus,
+                // ── Ringkasan semua channel (akomodasi + PPOB + travel) ──
+                'totals_all' => [
+                    'omzet'        => $totalOmzetAll,
+                    'omzet_month'  => $totalOmzetAllMonth,
+                    'omzet_trend'  => $this->calculateTrend($totalOmzetAllMonth, $totalOmzetAllLast),
+                    'profit'       => $totalProfitAll,
+                    'profit_month' => $totalProfitAllMonth,
+                    'count'        => $totalCountAll,
+                    'count_month'  => $totalCountAllMonth,
+                ],
+                'channels' => [
+                    'akomodasi' => [
+                        'omzet'        => (float) $totalRevenue,
+                        'omzet_month'  => (float) $revenueThisMonth,
+                        'profit'       => round($commissionRevenue, 2),
+                        'profit_month' => round($commissionThisMonth, 2),
+                        'count'        => $akoCount,
+                        'count_month'  => $akoCountMonth,
+                        'trend'        => $this->calculateTrend($revenueThisMonth, $revenueLastMonth),
+                    ],
+                    'ppob' => [
+                        'omzet'        => $ppobOmzet,
+                        'omzet_month'  => $ppobOmzetMonth,
+                        'profit'       => round($ppobProfit, 2),
+                        'profit_month' => round($ppobProfitMonth, 2),
+                        'count'        => $ppobCount,
+                        'count_month'  => $ppobCountMonth,
+                        'trend'        => $this->calculateTrend($ppobOmzetMonth, $ppobOmzetLast),
+                    ],
+                    'travel' => [
+                        'omzet'        => $travelOmzet,
+                        'omzet_month'  => $travelOmzetMonth,
+                        'profit'       => round($travelProfit, 2),
+                        'profit_month' => round($travelProfitMonth, 2),
+                        'count'        => $travelCount,
+                        'count_month'  => $travelCountMonth,
+                        'trend'        => $this->calculateTrend($travelOmzetMonth, $travelOmzetLast),
+                    ],
+                ],
+                'monthly_by_channel' => $monthlyByChannel,
             ],
         ]);
     }

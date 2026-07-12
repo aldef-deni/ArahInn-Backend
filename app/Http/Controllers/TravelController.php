@@ -283,6 +283,18 @@ class TravelController extends Controller
             'infant'         => 'nullable|integer|min:0|max:4',
         ]);
 
+        // Opsi A — cache hasil 45 detik (per rute+tanggal+pax): beberapa HP yang mencari hal
+        // sama dalam jendela ini mendapat hasil IDENTIK & mengurangi beban vendor. Harga/kursi
+        // tetap dikonfirmasi ulang di langkah fare, jadi staleness singkat ini aman.
+        $cacheKey = 'travel:flight:searchall:' . md5(implode('|', [
+            strtoupper($v['departure']), strtoupper($v['arrival']), $v['departure_date'],
+            $v['return_date'] ?? '', (int) $v['adult'], (int) ($v['child'] ?? 0), (int) ($v['infant'] ?? 0),
+        ]));
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached)) {
+            return response()->json(['success' => true, 'data' => $cached]);
+        }
+
         try {
             $res = $this->travel->searchAllFlights([
                 'departure'     => strtoupper($v['departure']),
@@ -311,7 +323,13 @@ class TravelController extends Controller
             ], 503);
         }
 
-        return response()->json(['success' => true, 'data' => $res['flights'] ?? []]);
+        $flights = $res['flights'] ?? [];
+        // Cache HANYA jika ada hasil — jangan cache kosong/gagal transien (mis. semua maskapai
+        // sempat timeout), agar request berikutnya mencoba fresh, bukan menyimpan "kosong" 45 dtk.
+        if (!empty($flights)) {
+            Cache::put($cacheKey, $flights, 45);
+        }
+        return response()->json(['success' => true, 'data' => $flights]);
     }
 
     /** Konfirmasi harga (fare). */

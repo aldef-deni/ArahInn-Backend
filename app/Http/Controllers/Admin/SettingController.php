@@ -332,11 +332,10 @@ class SettingController extends Controller
     {
         $rules = [];
         foreach (self::TRAVEL_FEE_MODAS as $m) {
-            $rules["$m.amount"]  = 'nullable|integer|min:0|max:100000000';
-            $rules["$m.percent"] = 'nullable|numeric|min:0|max:100';
+            $rules["$m.amount"]       = 'nullable|integer|min:0|max:100000000';
+            $rules["$m.percent"]      = 'nullable|numeric|min:0|max:100';
+            $rules["$m.admin_amount"] = 'nullable|integer|min:0|max:100000000'; // Biaya admin flat (pelni & kereta)
         }
-        // Biaya admin (nominal flat) — khusus PELNI.
-        $rules['pelni.admin_amount'] = 'nullable|integer|min:0|max:100000000';
         $data = $request->validate($rules);
 
         $settings = [
@@ -345,11 +344,11 @@ class SettingController extends Controller
         ];
         foreach (self::TRAVEL_FEE_MODAS as $m) {
             $settings[$m] = [
-                'amount'  => (int) ($data[$m]['amount'] ?? 0),
-                'percent' => isset($data[$m]['percent']) ? round((float) $data[$m]['percent'], 2) : 0,
+                'amount'       => (int) ($data[$m]['amount'] ?? 0),
+                'percent'      => isset($data[$m]['percent']) ? round((float) $data[$m]['percent'], 2) : 0,
+                'admin_amount' => (int) ($data[$m]['admin_amount'] ?? 0),
             ];
         }
-        $settings['pelni']['admin_amount'] = (int) ($data['pelni']['admin_amount'] ?? 0);
         self::writeSetting('travel_service_fee', $settings);
 
         return response()->json([
@@ -366,12 +365,11 @@ class SettingController extends Controller
         $out = [];
         foreach (self::TRAVEL_FEE_MODAS as $m) {
             $out[$m] = [
-                'amount'  => (int) ($o[$m]['amount'] ?? 0),
-                'percent' => (float) ($o[$m]['percent'] ?? 0),
+                'amount'       => (int) ($o[$m]['amount'] ?? 0),
+                'percent'      => (float) ($o[$m]['percent'] ?? 0),
+                'admin_amount' => (int) ($o[$m]['admin_amount'] ?? 0),
             ];
         }
-        // Biaya admin nominal — khusus PELNI.
-        $out['pelni']['admin_amount'] = (int) ($o['pelni']['admin_amount'] ?? 0);
         $out['updated_at'] = $o['updated_at'] ?? null;
         return $out;
     }

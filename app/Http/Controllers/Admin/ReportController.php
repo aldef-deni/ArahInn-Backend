@@ -54,6 +54,96 @@ class ReportController extends Controller
         ]);
     }
 
+    /** Laporan PPOB — transaksi berhasil (success) dalam periode. */
+    public function ppob(Request $request)
+    {
+        $from = $request->from ? now()->parse($request->from)->startOfDay() : now()->startOfMonth();
+        $to   = $request->to ? now()->parse($request->to)->endOfDay() : now();
+
+        $rows = DB::table('ppob_transactions')
+            ->leftJoin('users', 'users.id', '=', 'ppob_transactions.user_id')
+            ->where('ppob_transactions.status', 'success')
+            ->whereBetween('ppob_transactions.created_at', [$from, $to])
+            ->orderBy('ppob_transactions.created_at')
+            ->get([
+                'ppob_transactions.id', 'ppob_transactions.trx_code', 'ppob_transactions.product_name',
+                'ppob_transactions.customer_number', 'ppob_transactions.customer_name',
+                'ppob_transactions.total_amount', 'ppob_transactions.price_buy', 'ppob_transactions.price_sell',
+                'ppob_transactions.serial_number', 'ppob_transactions.status', 'ppob_transactions.created_at',
+                'users.name as user_name', 'users.email as user_email',
+            ]);
+
+        $profitOf = fn($r) => (float) $r->price_sell - (float) $r->price_buy;
+        $totalOmzet  = (float) $rows->sum('total_amount');
+        $totalProfit = (float) $rows->sum($profitOf);
+
+        $daily = $rows
+            ->groupBy(fn($r) => \Illuminate\Support\Carbon::parse($r->created_at)->format('Y-m-d'))
+            ->map(fn($g, $date) => [
+                'date'   => $date,
+                'count'  => $g->count(),
+                'amount' => (float) $g->sum('total_amount'),
+                'profit' => (float) $g->sum($profitOf),
+            ])->values();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'total_omzet'        => $totalOmzet,
+                'total_profit'       => round($totalProfit, 2),
+                'total_transactions' => $rows->count(),
+                'period'             => ['from' => $from, 'to' => $to],
+                'daily'              => $daily,
+                'transactions'       => $rows,
+            ],
+        ]);
+    }
+
+    /** Laporan Tiket Travel — e-tiket terbit (issued) dalam periode. */
+    public function travel(Request $request)
+    {
+        $from = $request->from ? now()->parse($request->from)->startOfDay() : now()->startOfMonth();
+        $to   = $request->to ? now()->parse($request->to)->endOfDay() : now();
+
+        $rows = DB::table('travel_bookings')
+            ->leftJoin('users', 'users.id', '=', 'travel_bookings.user_id')
+            ->where('travel_bookings.status', 'issued')
+            ->whereBetween('travel_bookings.created_at', [$from, $to])
+            ->orderBy('travel_bookings.created_at')
+            ->get([
+                'travel_bookings.id', 'travel_bookings.code', 'travel_bookings.moda',
+                'travel_bookings.origin', 'travel_bookings.destination', 'travel_bookings.service_name',
+                'travel_bookings.vendor_price', 'travel_bookings.markup', 'travel_bookings.admin_fee',
+                'travel_bookings.total_price', 'travel_bookings.pax', 'travel_bookings.depart_date',
+                'travel_bookings.status', 'travel_bookings.created_at',
+                'users.name as user_name', 'users.email as user_email',
+            ]);
+
+        $totalOmzet  = (float) $rows->sum('total_price');
+        $totalProfit = (float) $rows->sum('markup');   // biaya layanan = laba travel
+
+        $daily = $rows
+            ->groupBy(fn($r) => \Illuminate\Support\Carbon::parse($r->created_at)->format('Y-m-d'))
+            ->map(fn($g, $date) => [
+                'date'   => $date,
+                'count'  => $g->count(),
+                'amount' => (float) $g->sum('total_price'),
+                'profit' => (float) $g->sum('markup'),
+            ])->values();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'total_omzet'        => $totalOmzet,
+                'total_profit'       => round($totalProfit, 2),
+                'total_transactions' => $rows->count(),
+                'period'             => ['from' => $from, 'to' => $to],
+                'daily'              => $daily,
+                'transactions'       => $rows,
+            ],
+        ]);
+    }
+
     public function bookings(Request $request)
     {
         $from = $request->from ?? now()->startOfMonth()->toDateString();

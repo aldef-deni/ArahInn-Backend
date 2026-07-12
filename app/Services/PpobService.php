@@ -7,6 +7,7 @@ use App\Models\PpobCategory;
 use App\Models\PpobProduct;
 use App\Models\PpobTransaction;
 use App\Models\User;
+use App\Services\LoyaltyService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -32,7 +33,20 @@ class PpobService
 {
     public function __construct(
         private RajaBillerService $vendor,
+        private LoyaltyService    $loyalty,
     ) {}
+
+    /** Kembalikan poin yang di-redeem bila transaksi gagal/dibatalkan (non-kritis). */
+    private function refundLoyalty(PpobTransaction $trx): void
+    {
+        $amount = (int) round((float) $trx->loyalty_discount);
+        if ($amount <= 0) return;
+        try {
+            $this->loyalty->refundRedeem($trx->user_id, $amount, 'Pengembalian poin — PPOB ' . $trx->trx_code);
+        } catch (\Throwable $e) {
+            logger()->error('Refund poin PPOB gagal: ' . $e->getMessage(), ['trx' => $trx->trx_code]);
+        }
+    }
 
     /* ────────────────────────────────────────────────────────────────────
      | PREPAID flow — single step
@@ -61,12 +75,11 @@ class PpobService
             $totalAmount = $priceSell;
 
             // Khusus produk dengan nominal variable (PLN Prabayar, EMONEY open denom):
-            // user supply extra.nominal → total = nominal + admin + markup kecil (0.5% min 500).
+            // user supply extra.nominal → total = nominal + admin (TANPA markup layanan).
             if (!empty($extra['nominal']) && is_numeric($extra['nominal'])) {
                 $nominal     = (float) $extra['nominal'];
-                $markup      = (int) max(500, $nominal * 0.005); // 0.5% min 500
                 $priceBuy    = $nominal + $adminFee;
-                $priceSell   = $priceBuy + $markup;
+                $priceSell   = $priceBuy;        // tanpa markup: customer bayar nominal + admin saja
                 $totalAmount = $priceSell;
             }
 
@@ -218,9 +231,8 @@ class PpobService
                 // Variable-nominal (PLN Prabayar / E-Wallet open denom): harga dari NOMINAL,
                 // bukan tagihan (prabayar tak punya tagihan). Samakan dgn createPrepaidTransaction.
                 $nominal   = (float) $extra['nominal'];
-                $markup    = (int) max(500, $nominal * 0.005); // 0.5% min 500
                 $priceBuy  = $nominal + $admin;
-                $priceSell = $priceBuy + $markup;
+                $priceSell = $priceBuy;          // tanpa markup: customer bayar nominal + admin saja
 
                 $trx->update([
                     'price_buy'    => $priceBuy,
@@ -553,6 +565,8 @@ class PpobService
             'completed_at'   => now(),
         ]);
 
+        $this->refundLoyalty($trx);
+
         NotificationService::send(
             $trx->user_id, 'ppob_canceled',
             'Transaksi Dibatalkan',
@@ -576,6 +590,8 @@ class PpobService
             'refunded_at'  => now(),
             'refund_notes' => $notes,
         ]);
+
+        $this->refundLoyalty($trx);
 
         NotificationService::send(
             $trx->user_id, 'ppob_refunded',

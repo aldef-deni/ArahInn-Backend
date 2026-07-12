@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\PpobCategory;
 use App\Models\PpobProduct;
 use App\Models\PpobTransaction;
+use App\Services\LoyaltyService;
 use App\Services\PpobService;
 use App\Services\RajaBillerService;
 use App\Services\TravelService;
@@ -16,7 +17,41 @@ class PpobController extends Controller
     public function __construct(
         private PpobService       $ppob,
         private RajaBillerService $vendor,
+        private LoyaltyService    $loyalty,
     ) {}
+
+    /**
+     * Terapkan redeem poin loyalitas ke sebuah transaksi PPOB (1 poin = Rp1, tanpa
+     * batas s/d total). Dipanggil setelah harga final (purchase/confirmPay).
+     * Memotong total_amount, menyimpan loyalty_discount, & mengurangi saldo poin.
+     */
+    private function applyRedeem(PpobTransaction $trx, Request $request): PpobTransaction
+    {
+        if ($trx->status !== 'pending' || !$request->boolean('use_points')) return $trx;
+
+        $userId    = (int) $trx->user_id;
+        $requested = max(0, (int) $request->input('points_to_redeem', 0));
+        if ($requested <= 0) return $trx;
+
+        $balance  = $this->loyalty->getBalance($userId);
+        $cap      = (int) floor((float) $trx->total_amount);
+        $discount = max(0, min($requested, $balance, $cap));
+        if ($discount <= 0) return $trx;
+
+        // Loyalty NON-KRITIS: potong poin dulu; kalau gagal, transaksi tetap jalan
+        // (harga penuh) tanpa crash. Diskon hanya diterapkan bila redeem sukses.
+        try {
+            $this->loyalty->redeem($userId, $discount, null, 'Poin untuk PPOB ' . $trx->trx_code);
+            $trx->update([
+                'loyalty_discount' => $discount,
+                'total_amount'     => (float) $trx->total_amount - $discount,
+            ]);
+        } catch (\Throwable $e) {
+            logger()->error('PPOB redeem gagal (diabaikan): ' . $e->getMessage(), ['trx' => $trx->trx_code]);
+        }
+
+        return $trx->refresh();
+    }
 
     /* ──────────────────────────────────────────────────────────────────
      | Public — Catalog browsing
@@ -61,9 +96,11 @@ class PpobController extends Controller
     public function purchase(Request $request)
     {
         $data = $request->validate([
-            'product_id'      => 'required|integer|exists:ppob_products,id',
-            'customer_number' => 'required|string|max:50',
-            'extra'           => 'sometimes|array',
+            'product_id'       => 'required|integer|exists:ppob_products,id',
+            'customer_number'  => 'required|string|max:50',
+            'extra'            => 'sometimes|array',
+            'use_points'       => 'sometimes|boolean',
+            'points_to_redeem' => 'nullable|integer|min:0',
         ]);
 
         try {
@@ -73,6 +110,7 @@ class PpobController extends Controller
                 idpel     : $data['customer_number'],
                 extra     : $data['extra'] ?? [],
             );
+            $trx = $this->applyRedeem($trx, $request);
 
             return response()->json([
                 'success' => true,
@@ -135,6 +173,7 @@ class PpobController extends Controller
 
         try {
             $trx = $this->ppob->confirmPostpaidPay($trx);
+            $trx = $this->applyRedeem($trx, $request);
             return response()->json([
                 'success' => true,
                 'data'    => $this->presentTransaction($trx),
@@ -272,7 +311,15 @@ class PpobController extends Controller
             });
         }
 
-        $perPage = (int) ($request->query('limit', 30));
+        // Filter rentang tanggal (berdasarkan tanggal transaksi dibuat).
+        if ($from = $request->query('date_from')) {
+            $query->whereDate('created_at', '>=', $from);
+        }
+        if ($to = $request->query('date_to')) {
+            $query->whereDate('created_at', '<=', $to);
+        }
+
+        $perPage = min(100000, max(1, (int) ($request->query('limit', 30))));
         return response()->json(['success' => true, 'data' => $query->paginate($perPage)]);
     }
 
@@ -449,9 +496,10 @@ class PpobController extends Controller
                 'name'   => $trx->customer_name,
             ],
             'pricing'         => [
-                'tagihan'      => (float) $trx->price_buy,
-                'admin_fee'    => (float) $trx->admin_fee,
-                'total_amount' => (float) $trx->total_amount,
+                'tagihan'          => (float) $trx->price_buy,
+                'admin_fee'        => (float) $trx->admin_fee,
+                'loyalty_discount' => (float) $trx->loyalty_discount,
+                'total_amount'     => (float) $trx->total_amount,
             ],
             'serial_number'   => $trx->serial_number,
             'struk_url'       => $trx->struk_url,

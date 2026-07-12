@@ -208,6 +208,7 @@ class TravelIssuedMail extends Mailable
 
         return [
             'orderId'      => $first->group_code ?: $first->code,
+            'moda'         => $first->moda,   // utk label fee kereta (Convenience Fee / Biaya Penanganan)
             'isPaid'       => in_array($first->status, ['paid', 'issued'], true),
             'contactName'  => $name ?: '—',
             'contactEmail' => $email,

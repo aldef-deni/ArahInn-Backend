@@ -378,6 +378,13 @@ class BookingService
         $booking->update(['status' => 'canceled', 'canceled_at' => now()]);
         $this->lock->unlock($booking->room_id);
 
+        // Kembalikan poin loyalitas yang dipakai (non-kritis → jangan crash transaksi).
+        $rd = (int) round((float) ($booking->loyalty_discount ?? 0));
+        if ($rd > 0) {
+            try { $this->loyalty->refundRedeem($booking->user_id, $rd, 'Pengembalian poin — booking ' . $booking->booking_code); }
+            catch (\Throwable $e) { logger()->error('Refund poin akomodasi (cancel) gagal: ' . $e->getMessage()); }
+        }
+
         // Email ke tamu
         Mail::to($booking->guest_email)->send(new \App\Mail\BookingCanceledMail($booking));
 

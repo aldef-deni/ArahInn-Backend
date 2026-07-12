@@ -13,7 +13,7 @@ class TravelBooking extends Model
         'origin', 'destination', 'origin_name', 'destination_name',
         'depart_date', 'depart_time', 'arrive_time', 'service_name', 'class',
         'passengers', 'pax', 'vendor_price', 'markup', 'admin_fee', 'total_price',
-        'promo_id', 'promo_discount',
+        'promo_id', 'promo_discount', 'loyalty_discount',
         'status', 'payment_method', 'time_limit', 'paid_at', 'issued_at',
         'url_etiket', 'url_struk', 'url_image', 'meta',
     ];
@@ -26,6 +26,16 @@ class TravelBooking extends Model
         'paid_at'     => 'datetime',
         'issued_at'   => 'datetime',
     ];
+
+    // Sisa detik batas bayar dihitung di server → FE anchor ke jam client (hindari selisih jam).
+    protected $appends = ['time_left_seconds'];
+
+    public function getTimeLeftSecondsAttribute(): ?int
+    {
+        if (!$this->time_limit) return null;
+        $sec = (int) now()->diffInSeconds($this->time_limit, false);
+        return max(0, $sec);
+    }
 
     public function user(): BelongsTo
     {
